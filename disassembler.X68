@@ -24,31 +24,49 @@ start   org     $1000
 	
 	lsl.w   #4,d0
 	lsr.w   #4,d0
-	bra     construct_effective_addresses
-	
+	move.b  #'M',(a2)+
+	move.b  #'O',(a2)+
+	move.b  #'V',(a2)+
+	move.b  #'E',(a2)+
+	move.b  #'.',(a2)+
+	move.b  #'B',(a2)+
+	move.b  #' ',(a2)+
+	jsr     compute_address
 	bra     done
-    
-construct_effective_addresses
-    jsr     get_source_mode_bits
-    lea     address_mode_jump_table,a5
-    lea     register_label_jump_table,a6
-    mulu    #8,d1
-    jsr     (a5,d1)
-    jsr     get_source_register_bits
-    mulu    #8,d1
-    jsr     (a6,d1)
-    move.b  #',',(a2)+
-    jsr     get_destination_mode_bits
-    mulu    #8,d1
-    jsr     (a5,d1)
-    jsr     get_destination_register_bits
-    mulu    #8,d1
-    jsr     (a6,d1) 
 
+
+
+	
+	
+
+done
+    stop    #exit
+	
+	
+compute_address
+    lea     address_mode_jump_table,a4
+    lea     register_label_jump_table,a5
+    jsr     get_source
+    jsr     get_destination
+    rts
+    
+    
+get_source
+    jsr     get_source_register_bits
+    move.b  d1,d3
+    jsr     get_source_mode_bits
+    mulu    #8,d1
+    jsr     (a4,d1)   
     rts
 
-
-    
+get_destination
+    move.b  #',',(a2)+
+    jsr     get_destination_register_bits
+    move.b  d1,d3
+    jsr     get_destination_mode_bits
+    mulu    #8,d1
+    jsr     (a4,d1)
+    rts
 
 *-----------------------------------------------------------
 *				   Get Destination Register					
@@ -70,7 +88,7 @@ get_destination_mode_bits
     rts
 
 *-----------------------------------------------------------
-*				      Get Source Mode				
+*				       Get Source Mode				
 *-----------------------------------------------------------
 get_source_mode_bits
     move.w  d0,d1
@@ -79,7 +97,6 @@ get_source_mode_bits
     lsr.w   #8,d1
     lsr.w   #5,d1
     rts
-    
     
 *-----------------------------------------------------------
 *                    Get Source Register				 				
@@ -92,12 +109,10 @@ get_source_register_bits
     lsr.b   #5,d1
     rts
 
-done
-    stop    #exit
 
 
 *-----------------------------------------------------------
-*                   Address Mode Jump Table				 				
+*                  Address Mode Jump Table				 				
 *-----------------------------------------------------------
 address_mode_jump_table
     jsr     data_register
@@ -118,7 +133,7 @@ address_mode_jump_table
     rts
     
 *-----------------------------------------------------------
-*                    Register Label Jump Table			 				
+*                Register Label Jump Table			 				
 *-----------------------------------------------------------
 register_label_jump_table
     jsr     register_0
@@ -136,26 +151,50 @@ register_label_jump_table
     jsr     register_6
     rts 
     jsr     register_7
+    rts
     
 
 data_register
     move.b  #'D',(a2)+
+    mulu    #8,d3
+    jsr     (a5,d3)
     rts
     
 address_register
     move.b  #'A',(a2)+
+    mulu    #8,d3
+    jsr     (a5,d3)
     rts
     
 address_mode_indirect
+    move.b  #'(',(a2)+
+    move.b  #'A',(a2)+ 
+    mulu    #8,d3
+    jsr     (a5,d3)
+    move.b  #')',(a2)+ 
     rts
     
 address_post_increment
+    move.b  #'(',(a2)+
+    move.b  #'A',(a2)+ 
+    mulu    #8,d3
+    jsr     (a5,d3)
+    move.b  #')',(a2)+
+    move.b  #'+',(a2)+
     rts
     
 address_post_decrement
+    move.b  #'-',(a2)+
+    move.b  #'(',(a2)+
+    move.b  #'A',(a2)+ 
+    mulu    #8,d3
+    jsr     (a5,d3)
+    move.b  #')',(a2)+ 
     rts
     
 immediate_data
+    move.b  #'#',(a2)+
+    * Get the immediate data
     rts
     
 garbage1
@@ -197,7 +236,7 @@ register_7
     rts
     
    
-test	dc.w	$1003	
+test	dc.w	$1F03	
 SNP     dc.b    '                _ _                    _                                   ',cr,lf
         dc.b    '               | | |                  | |                                  ',cr,lf
         dc.b    '      ___  __ _| | |_   __ _ _ __   __| | _ __   ___ _ __  _ __   ___ _ __ ',cr,lf
@@ -209,8 +248,3 @@ SNP     dc.b    '                _ _                    _                       
          
 
     end    start
-
-*~Font name~Courier New~
-*~Font size~10~
-*~Tab type~1~
-*~Tab size~4~
