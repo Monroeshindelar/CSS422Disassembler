@@ -4,42 +4,65 @@
 * Date       : November 9th 2017 
 * Description: 
 *-----------------------------------------------------------
-CR  EQU     $0D
-LF  EQU     $0A
+cr      equ     $0d
+lf      equ     $0a
+exit    equ     $2700    
 
-START       ORG $1000
+start   org     $1000
 
 *-----------------------------------------------------------
-*				Displaying Startup Message
+*				   Displaying Startup Message
 *-----------------------------------------------------------
-    LEA     SNP,A1
-    MOVE.B  #14,D0
-    TRAP    #15
+    lea     snp,a1
+    move.b  #14,d0
+    trap    #15
 	
 *-----------------------------------------------------------
-*				   Effective Addressing					
+*				     Effective Addressing					
 *-----------------------------------------------------------
 	move.w	test,d0
+	
 	lsl.w   #4,d0
 	lsr.w   #4,d0
-	jsr     isolate_source_register
+	bra     construct_effective_addresses
+	
+	bra     done
+    
+construct_effective_addresses
+    jsr     get_source_mode_bits
+    lea     address_mode_jump_table,a5
+    lea     register_label_jump_table,a6
+    mulu    #8,d1
+    jsr     (a5,d1)
+    jsr     get_source_register_bits
+    mulu    #8,d1
+    jsr     (a6,d1)
+    move.b  #',',(a2)+
+    jsr     get_destination_mode_bits
+    mulu    #8,d1
+    jsr     (a5,d1)
+    jsr     get_destination_register_bits
+    mulu    #8,d1
+    jsr     (a6,d1) 
 
-    bra     done
+    rts
 
+
+    
 
 *-----------------------------------------------------------
-*				  Get Destination Register					
+*				   Get Destination Register					
 *-----------------------------------------------------------	
-get_destination_register
+get_destination_register_bits
     move.w  d0,d1
     lsr.w   #8,d1
     lsr.b   #1,d1
     rts
 
 *-----------------------------------------------------------
-*				    Get Destination Mode				
+*				     Get Destination Mode				
 *-----------------------------------------------------------    
-get_destination_mode
+get_destination_mode_bits
     move.w  d0,d1
     lsl.w   #7,d1
     lsr.w   #8,d1
@@ -49,7 +72,7 @@ get_destination_mode
 *-----------------------------------------------------------
 *				      Get Source Mode				
 *-----------------------------------------------------------
-get_source_mode
+get_source_mode_bits
     move.w  d0,d1
     lsl.w   #6,d1
     lsl.w   #4,d1
@@ -61,7 +84,7 @@ get_source_mode
 *-----------------------------------------------------------
 *                    Get Source Register				 				
 *-----------------------------------------------------------    
-get_source_register
+get_source_register_bits
     move.w  d0,d1
     lsl.w   #8,d1
     lsl.w   #5,d1
@@ -69,14 +92,14 @@ get_source_register
     lsr.b   #5,d1
     rts
 
-
 done
+    stop    #exit
 
 
 *-----------------------------------------------------------
-*              Determine Address Mode Jump Table				 				
+*                   Address Mode Jump Table				 				
 *-----------------------------------------------------------
-determine_address_mode
+address_mode_jump_table
     jsr     data_register
     rts
     jsr     address_register
@@ -94,11 +117,33 @@ determine_address_mode
     jsr     immediate_data
     rts
     
+*-----------------------------------------------------------
+*                    Register Label Jump Table			 				
+*-----------------------------------------------------------
+register_label_jump_table
+    jsr     register_0
+    rts
+    jsr     register_1
+    rts
+    jsr     register_2
+    rts     
+    jsr     register_3
+    rts
+    jsr     register_4
+    rts
+    jsr     register_5
+    rts
+    jsr     register_6
+    rts 
+    jsr     register_7
     
+
 data_register
+    move.b  #'D',(a2)+
     rts
     
 address_register
+    move.b  #'A',(a2)+
     rts
     
 address_mode_indirect
@@ -111,22 +156,59 @@ address_post_decrement
     rts
     
 immediate_data
-    rts 
+    rts
+    
+garbage1
+    rts
+    
+garbage
+    rts
+    
+register_0
+    move.b  #'0',(a2)+ 
+    rts
+    
+register_1
+    move.b  #'1',(a2)+
+    rts
+    
+register_2
+    move.b  #'2',(a2)+
+    rts
 
+register_3
+    move.b  #'3',(a2)+
+    rts
 
-
-test	dc.w	$8A5B	
-SNP     DC.B    '                _ _                    _                                   ',CR,LF
-        DC.B    '               | | |                  | |                                  ',CR,LF
-        DC.B    '      ___  __ _| | |_   __ _ _ __   __| | _ __   ___ _ __  _ __   ___ _ __ ',CR,LF
-        DC.B    '     / __|/ _` | | __| / _` | `_ \ / _` || `_ \ / _ \ `_ \| `_ \ / _ \ `__|',CR,LF
-        DC.B    '     \__ \ (_| | | |_ | (_| | | | | (_| || |_) |  __/ |_) | |_) |  __/ |   ',CR,LF
-        DC.B    '     |___/\__,_|_|\__| \__,_|_| |_|\__,_|| .__/ \___| .__/| .__/ \___|_|   ',CR,LF
-        DC.B    '                                         | |        | |   | |              ',CR,LF
-        DC.B    '                                         |_|        |_|   |_|              ',CR,LF,0
+register_4
+    move.b  #'4',(a2)+
+    rts
+    
+register_5
+    move.b  #'5',(a2)+
+    rts
+   
+register_6
+    move.b  #'6',(a2)+
+    rts
+    
+register_7
+    move.b  #'7',(a2)+
+    rts
+    
+   
+test	dc.w	$1003	
+SNP     dc.b    '                _ _                    _                                   ',cr,lf
+        dc.b    '               | | |                  | |                                  ',cr,lf
+        dc.b    '      ___  __ _| | |_   __ _ _ __   __| | _ __   ___ _ __  _ __   ___ _ __ ',cr,lf
+        dc.b    '     / __|/ _` | | __| / _` | `_ \ / _` || `_ \ / _ \ `_ \| `_ \ / _ \ `__|',cr,lf
+        dc.b    '     \__ \ (_| | | |_ | (_| | | | | (_| || |_) |  __/ |_) | |_) |  __/ |   ',cr,lf
+        dc.b    '     |___/\__,_|_|\__| \__,_|_| |_|\__,_|| .__/ \___| .__/| .__/ \___|_|   ',cr,lf
+        dc.b    '                                         | |        | |   | |              ',cr,lf
+        dc.b    '                                         |_|        |_|   |_|              ',cr,lf,0
          
 
-    END    START
+    end    start
 
 *~Font name~Courier New~
 *~Font size~10~
