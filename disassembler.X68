@@ -35,37 +35,33 @@ start   org     $1000
 	bra     done
 
 
-
-	
-	
-
 done
     stop    #exit
 	
 	
 compute_address
-    lea     address_mode_jump_table,a4
-    lea     register_label_jump_table,a5
     jsr     get_source
     jsr     get_destination
     rts
     
     
 get_source
+    lea     address_mode_jump_table,a5
     jsr     get_source_register_bits
     move.b  d1,d3
     jsr     get_source_mode_bits
     mulu    #8,d1
-    jsr     (a4,d1)   
+    jsr     (a5,d1)   
     rts
 
 get_destination
+    lea     address_mode_jump_table,a5
     move.b  #',',(a2)+
     jsr     get_destination_register_bits
     move.b  d1,d3
     jsr     get_destination_mode_bits
     mulu    #8,d1
-    jsr     (a4,d1)
+    jsr     (a5,d1)
     rts
 
 *-----------------------------------------------------------
@@ -109,8 +105,6 @@ get_source_register_bits
     lsr.b   #5,d1
     rts
 
-
-
 *-----------------------------------------------------------
 *                  Address Mode Jump Table				 				
 *-----------------------------------------------------------
@@ -135,33 +129,50 @@ address_mode_jump_table
 *-----------------------------------------------------------
 *                Register Label Jump Table			 				
 *-----------------------------------------------------------
-register_label_jump_table
-    jsr     register_0
+hex_jump_table
+    jsr     zero
     rts
-    jsr     register_1
+    jsr     one
     rts
-    jsr     register_2
+    jsr     two
     rts     
-    jsr     register_3
+    jsr     three
     rts
-    jsr     register_4
+    jsr     four
     rts
-    jsr     register_5
+    jsr     five
     rts
-    jsr     register_6
+    jsr     six
     rts 
-    jsr     register_7
+    jsr     seven
     rts
+    jsr     eight
+    rts
+    jsr     nine
+    rts
+    jsr     a
+    rts
+    jsr     b
+    rts
+    jsr     c
+    rts
+    jsr     d
+    rts     
+    jsr     e
+    rts
+    jsr     f
     
 
 data_register
     move.b  #'D',(a2)+
+    lea     hex_jump_table,a5
     mulu    #8,d3
     jsr     (a5,d3)
     rts
     
 address_register
     move.b  #'A',(a2)+
+    lea     hex_jump_table,a5
     mulu    #8,d3
     jsr     (a5,d3)
     rts
@@ -169,6 +180,7 @@ address_register
 address_mode_indirect
     move.b  #'(',(a2)+
     move.b  #'A',(a2)+ 
+    lea     hex_jump_table,a5
     mulu    #8,d3
     jsr     (a5,d3)
     move.b  #')',(a2)+ 
@@ -177,6 +189,7 @@ address_mode_indirect
 address_post_increment
     move.b  #'(',(a2)+
     move.b  #'A',(a2)+ 
+    lea     hex_jump_table,a5
     mulu    #8,d3
     jsr     (a5,d3)
     move.b  #')',(a2)+
@@ -186,7 +199,8 @@ address_post_increment
 address_post_decrement
     move.b  #'-',(a2)+
     move.b  #'(',(a2)+
-    move.b  #'A',(a2)+ 
+    move.b  #'A',(a2)+
+    lea     hex_jump_table,a5
     mulu    #8,d3
     jsr     (a5,d3)
     move.b  #')',(a2)+ 
@@ -203,40 +217,68 @@ garbage1
 garbage
     rts
     
-register_0
+zero
     move.b  #'0',(a2)+ 
     rts
     
-register_1
+one
     move.b  #'1',(a2)+
     rts
     
-register_2
+two
     move.b  #'2',(a2)+
     rts
 
-register_3
+three
     move.b  #'3',(a2)+
     rts
 
-register_4
+four
     move.b  #'4',(a2)+
     rts
     
-register_5
+five
     move.b  #'5',(a2)+
     rts
    
-register_6
+six
     move.b  #'6',(a2)+
     rts
     
-register_7
+seven
     move.b  #'7',(a2)+
     rts
+
+eight
+    move.b  #'8',(a2)+
+    rts
+  
+nine
+    move.b  #'9',(a2)+
+    rts
+
+a
+    move.b  #'A',(a2)+
+    rts
+  
+b
+    move.b  #'B',(a2)+
+    rts
     
+c
+    move.b  #'C',(a2)+
+    rts
+d
+    move.b  #'D',(a2)+
+    rts
+e
+    move.b  #'E',(a2)+
+    rts
+f
+    move.b  #'F',(a2)+
+    rts
    
-test	dc.w	$1F03	
+test	dc.w	$1013	
 SNP     dc.b    '                _ _                    _                                   ',cr,lf
         dc.b    '               | | |                  | |                                  ',cr,lf
         dc.b    '      ___  __ _| | |_   __ _ _ __   __| | _ __   ___ _ __  _ __   ___ _ __ ',cr,lf
