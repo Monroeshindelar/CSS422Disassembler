@@ -25,17 +25,27 @@ start   org     $1000
     trap    #15
     clr     d0
     jsr     convert_to_hex
+    jsr     prepare_to_load_address
+    jsr     get_address
+    movea.l d2,a2
     
     lea     entend,a1
     move.b  #14,d0
     trap    #15
     
-    lea     $0010,a0
-    lea     $2010,a1
+    lea     $0000,a0
+    lea     $2000,a1
     move.b  #2,d0
     trap    #15
     clr     d0
     jsr     convert_to_hex
+    jsr     prepare_to_load_address
+    jsr     get_address
+    movea.l d2,a3
+
+    jsr     clear_all_data_registers
+    
+    simhalt
     
     
 *-----------------------------------------------------------
@@ -53,10 +63,13 @@ start   org     $1000
 	jsr     compute_address
 	bra     done
 	
-	
+*-----------------------------------------------------------
+*                         Conversion                  
+*-----------------------------------------------------------
 convert_to_hex
     move.b  (a1)+,d1
     beq     return_helper
+    addi.b  #1,d5
     cmpi.b  #$30,d1
     blt     invalid
     cmpi.b  #$66,d1
@@ -73,7 +86,6 @@ convert_to_hex
 convert_number_to_hex
     subi.b  #$30,d1
     move.b  d1,(a0)+
-    move.b  #1,d5
     bra     convert_to_hex
 
 convert_lowercase_letter_to_hex
@@ -86,7 +98,36 @@ convert_uppercase_letter_to_hex
     move.b  d1,(a0)+
     bra     convert_to_hex
 
+prepare_to_load_address
+    clr     d0
+    clr     d1
+    clr     d2
+    lea     $0000,a0
+    rts
+
+get_address
+    move.b  (a0)+,d1
+    cmp.b   #0,d5
+    beq     return_helper
+    asl.l   #4,d2
+    add.b   d1,d2
+    subi.b  #1,d5
+    bra     get_address
+
+
+
 return_helper
+    rts
+
+clear_all_data_registers
+    clr     d0
+    clr     d1
+    clr     d2
+    clr     d3
+    clr     d4
+    clr     d5
+    clr     d6
+    clr     d7
     rts
     
 invalid
