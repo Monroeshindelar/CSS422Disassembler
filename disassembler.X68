@@ -41,7 +41,8 @@ start   org     $1000
     jsr     convert_to_hex
     jsr     prepare_to_load_address
     jsr     get_address
-    movea.l d2,a3
+    movea.l d2,a3
+
 
     move.w test,(a2)+
     move.w #$4E71,(a2)
@@ -181,13 +182,32 @@ get_op_code
 
 
 evaluate_operation
-    jsr     get_op_code
+    jsr     get_op_code             * May optimize code later to start with checking first 4 bits for validity
+    
     cmp.w   #$4E71,d0
-    beq     no_op
-    cmp.b   #01,d1
+    beq     no_op                   * check for NOP
+    
+    cmp.w   #$4E75,d0
+    beq     return_to_sub           * check for RTS
+    
+    cmp.b   #01,d1                  * check for MOVE.B
     beq     move_byte
-    bra     loop
+    
+    cmp.b   #3,d1                   * check for MOVE.W
+    beq     move_word
+    
+    cmp.b   #2,d1
+    beq     move_long               * check for MOVE.L
+    
+    bra     loop                    * when are we supposed to be looping?...
 
+check_move_type
+    move.w  d0,d1
+    lsl     #7,d1                   * Isolate destination address mode bits
+    lsr     #8,d1
+    lsr     #5,d1
+    
+    
 *-----------------------------------------------------------
 *				    Get Destination Register					
 *-----------------------------------------------------------	
@@ -305,6 +325,8 @@ no_op
     rts
     
 move_byte
+    cmp.b   #1,d1
+    beq     invalid                     *If MOVEA and size is B, it is invalid
     move.b  #'M',(a0)+
     move.b  #'O',(a0)+
     move.b  #'V',(a0)+
@@ -320,6 +342,9 @@ move_word
     move.b  #'O',(a0)+
     move.b  #'V',(a0)+
     move.b  #'E',(a0)+
+    cmp.b   #1,d1
+    beq     move_A                  * Add 'A' if destination address mode bits is 001
+continue_move
     move.b  #'.',(a0)+
     move.b  #'W',(a0)+
     move.b  #' ',(a0)+ 
@@ -330,12 +355,23 @@ move_long
     move.b  #'O',(a0)+
     move.b  #'V',(a0)+
     move.b  #'E',(a0)+
+    cmp.b   #1,d1
+    beq     move_A                  * Add 'A' if destination address mode bits is 001
+continue_move
     move.b  #'.',(a0)+
     move.b  #'L',(a0)+
     move.b  #' ',(a0)+ 
     rts
     
-
+move_A
+    move.b  #'A',(a0)+
+    BRA     continue_move   
+    
+return_to_sub
+    move.b  #'R',(a0)+
+    move.b  #'T',(a0)+
+    move.b  #'S',(a0)+
+    move.b  #' ',(a0)+
 
 *-----------------------------------------------------------
 *                     Addressing Modes				 				
@@ -472,6 +508,7 @@ snp     dc.b    '                _ _                    _                       
 entend  dc.b    'Please enter an ending address: '                                           ,0 
 
     end    start
+
 
 *~Font name~Courier New~
 *~Font size~10~
