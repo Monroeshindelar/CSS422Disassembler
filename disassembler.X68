@@ -191,10 +191,10 @@ evaluate_operation
     beq     return_to_sub           * check for RTS
     
     cmp.b   #01,d1                  * check for MOVE.B
-    beq     move_byte
+    beq     check_move_type
     
     cmp.b   #3,d1                   * check for MOVE.W
-    beq     move_word
+    beq     check_move_type
     
     cmp.b   #2,d1
     beq     move_long               * check for MOVE.L
@@ -202,10 +202,12 @@ evaluate_operation
     bra     loop                    * when are we supposed to be looping?...
 
 check_move_type
-    move.w  d0,d1
-    lsl     #7,d1                   * Isolate destination address mode bits
-    lsr     #8,d1
-    lsr     #5,d1
+    move.b  d1,d3                   * store size of move
+    jsr     get_destination_mode_bits
+    cmp     #1,d1                   * if destination bits is 001, go to moveA. Otherwise, go to move.
+    beq     moveA
+    jsr     move
+    bra     loop
     
     
 *-----------------------------------------------------------
@@ -324,49 +326,57 @@ no_op
     move.b  #'P',(a0)+
     rts
     
-move_byte
-    cmp.b   #1,d1
-    beq     invalid                     *If MOVEA and size is B, it is invalid
+move
     move.b  #'M',(a0)+
     move.b  #'O',(a0)+
     move.b  #'V',(a0)+
     move.b  #'E',(a0)+
+    cmp.b   #1,d3
+    beq     size_b
+    
+    cmp.b   #3,d3
+    beq     size_w
+    
+    cmp.b   #2,d3
+    beq     size_l
+
+     
+moveA
+    cmp.b   #1,d3
+    beq     invalid             *MOVEA cannot have byte addressing
+    move.b  #'M',(a0)+
+    move.b  #'O',(a0)+
+    move.b  #'V',(a0)+
+    move.b  #'E',(a0)+
+    move.b  #'A',(a0)+
+    
+    cmp.b   #3,d3
+    beq     size_w
+    
+    cmp.b   #2,d3
+    beq     size_l
+
+size_b
     move.b  #'.',(a0)+
     move.b  #'B',(a0)+
-    move.b  #' ',(a0)+ 
+    move.b  #' ',(a0)+
     jsr     compute_address
-    rts 
- 
-move_word
-    move.b  #'M',(a0)+
-    move.b  #'O',(a0)+
-    move.b  #'V',(a0)+
-    move.b  #'E',(a0)+
-    cmp.b   #1,d1
-    beq     move_A                  * Add 'A' if destination address mode bits is 001
-continue_move
+    rts
+    
+size_w
     move.b  #'.',(a0)+
     move.b  #'W',(a0)+
-    move.b  #' ',(a0)+ 
+    move.b  #' ',(a0)+
+    jsr     compute_address
     rts
- 
-move_long
-    move.b  #'M',(a0)+
-    move.b  #'O',(a0)+
-    move.b  #'V',(a0)+
-    move.b  #'E',(a0)+
-    cmp.b   #1,d1
-    beq     move_A                  * Add 'A' if destination address mode bits is 001
-continue_move
+
+size_l
     move.b  #'.',(a0)+
     move.b  #'L',(a0)+
-    move.b  #' ',(a0)+ 
+    move.b  #' ',(a0)+
+    jsr     compute_address
     rts
-    
-move_A
-    move.b  #'A',(a0)+
-    BRA     continue_move   
-    
+
 return_to_sub
     move.b  #'R',(a0)+
     move.b  #'T',(a0)+
@@ -508,6 +518,7 @@ snp     dc.b    '                _ _                    _                       
 entend  dc.b    'Please enter an ending address: '                                           ,0 
 
     end    start
+
 
 
 *~Font name~Courier New~
