@@ -41,11 +41,21 @@ start   org     $1000
     jsr     convert_to_hex
     jsr     prepare_to_load_address
     jsr     get_address
-    movea.l d2,a3
+    movea.l d2,a3
+
+    move.w test,(a2)+
+    move.w #$4E71,(a2)
+
+
 
     jsr     clear_all_data_registers
+    lea     $0000,a0
     
-    simhalt
+loop
+   cmp      a2,a3
+   beq      done
+   move.w   (a2)+,d0
+   jsr 	    evaluate_operation
     
     
 *-----------------------------------------------------------
@@ -55,9 +65,6 @@ start   org     $1000
 	
 	jsr     get_op_code
 	jsr     move_byte
-	
-	lsl.w   #4,d0
-	lsr.w   #4,d0
 
 	
 	jsr     compute_address
@@ -115,7 +122,6 @@ get_address
     bra     get_address
 
 
-
 return_helper
     rts
 
@@ -138,6 +144,8 @@ done
 	
 	
 compute_address
+    lsl.w   #4,d0
+    lsr.w   #4,d0
     jsr     get_source
     jsr     get_destination
     rts
@@ -154,7 +162,7 @@ get_source
 
 get_destination
     lea     address_mode_jump_table,a5
-    move.b  #',',(a2)+
+    move.b  #',',(a0)+
     jsr     get_destination_register_bits
     move.b  d1,d3
     jsr     get_destination_mode_bits
@@ -171,6 +179,14 @@ get_op_code
     lsr     #4,d1
     rts
 
+
+evaluate_operation
+    jsr     get_op_code
+    cmp.w   #$4E71,d0
+    beq     no_op
+    cmp.b   #01,d1
+    beq     move_byte
+    bra     loop
 
 *-----------------------------------------------------------
 *				    Get Destination Register					
@@ -214,7 +230,7 @@ get_source_register_bits
     rts
 
 *-----------------------------------------------------------
-*                   Address Mode Jump Table				 				
+*                   Address Mode Jump Table				 			       
 *-----------------------------------------------------------
 address_mode_jump_table
     jsr     data_register
@@ -275,99 +291,100 @@ hex_jump_table
 *                        OP Codes 			 				
 *-----------------------------------------------------------
 data
-    move.b  #'D',(a2)+
-    move.b  #'A',(a2)+
-    move.b  #'T',(a2)+
-    move.b  #'A',(a2)+
-    move.b  #' ',(a2)+
+    move.b  #'D',(a0)+
+    move.b  #'A',(a0)+
+    move.b  #'T',(a0)+
+    move.b  #'A',(a0)+
+    move.b  #' ',(a0)+
     rts
     
 no_op
-    move.b  #'N',(a2)+
-    move.b  #'O',(a2)+
-    move.b  #'P',(a2)+
-    move.b  #' ',(a2)+
+    move.b  #'N',(a0)+
+    move.b  #'O',(a0)+
+    move.b  #'P',(a0)+
     rts
     
 move_byte
-    move.b  #'M',(a2)+
-    move.b  #'O',(a2)+
-    move.b  #'V',(a2)+
-    move.b  #'E',(a2)+
-    move.b  #'.',(a2)+
-    move.b  #'B',(a2)+
-    move.b  #' ',(a2)+ 
+    move.b  #'M',(a0)+
+    move.b  #'O',(a0)+
+    move.b  #'V',(a0)+
+    move.b  #'E',(a0)+
+    move.b  #'.',(a0)+
+    move.b  #'B',(a0)+
+    move.b  #' ',(a0)+ 
+    jsr     compute_address
     rts 
  
 move_word
-    move.b  #'M',(a2)+
-    move.b  #'O',(a2)+
-    move.b  #'V',(a2)+
-    move.b  #'E',(a2)+
-    move.b  #'.',(a2)+
-    move.b  #'W',(a2)+
-    move.b  #' ',(a2)+ 
+    move.b  #'M',(a0)+
+    move.b  #'O',(a0)+
+    move.b  #'V',(a0)+
+    move.b  #'E',(a0)+
+    move.b  #'.',(a0)+
+    move.b  #'W',(a0)+
+    move.b  #' ',(a0)+ 
     rts
  
 move_long
-    move.b  #'M',(a2)+
-    move.b  #'O',(a2)+
-    move.b  #'V',(a2)+
-    move.b  #'E',(a2)+
-    move.b  #'.',(a2)+
-    move.b  #'L',(a2)+
-    move.b  #' ',(a2)+ 
+    move.b  #'M',(a0)+
+    move.b  #'O',(a0)+
+    move.b  #'V',(a0)+
+    move.b  #'E',(a0)+
+    move.b  #'.',(a0)+
+    move.b  #'L',(a0)+
+    move.b  #' ',(a0)+ 
     rts
+    
 
 
 *-----------------------------------------------------------
 *                     Addressing Modes				 				
 *-----------------------------------------------------------
 data_register
-    move.b  #'D',(a2)+
+    move.b  #'D',(a0)+
     lea     hex_jump_table,a5
     mulu    #8,d3
     jsr     (a5,d3)
     rts
     
 address_register
-    move.b  #'A',(a2)+
+    move.b  #'A',(a0)+
     lea     hex_jump_table,a5
     mulu    #8,d3
     jsr     (a5,d3)
     rts
     
 address_mode_indirect
-    move.b  #'(',(a2)+
-    move.b  #'A',(a2)+ 
+    move.b  #'(',(a0)+
+    move.b  #'A',(a0)+ 
     lea     hex_jump_table,a5
     mulu    #8,d3
     jsr     (a5,d3)
-    move.b  #')',(a2)+ 
+    move.b  #')',(a0)+ 
     rts
     
 address_post_increment
-    move.b  #'(',(a2)+
-    move.b  #'A',(a2)+ 
+    move.b  #'(',(a0)+
+    move.b  #'A',(a0)+ 
     lea     hex_jump_table,a5
     mulu    #8,d3
     jsr     (a5,d3)
-    move.b  #')',(a2)+
-    move.b  #'+',(a2)+
+    move.b  #')',(a0)+
+    move.b  #'+',(a0)+
     rts
     
 address_post_decrement
-    move.b  #'-',(a2)+ 
-    move.b  #'(',(a2)+
-    move.b  #'A',(a2)+
+    move.b  #'-',(a0)+ 
+    move.b  #'(',(a0)+
+    move.b  #'A',(a0)+
     lea     hex_jump_table,a5
     mulu    #8,d3
     jsr     (a5,d3)
-    move.b  #')',(a2)+ 
+    move.b  #')',(a0)+ 
     rts
     
 immediate_data
-    move.b  #'#',(a2)+
+    move.b  #'#',(a0)+
     * Get the immediate data
     rts
     
@@ -381,64 +398,64 @@ garbage
 *                        Hex Values			 				
 *-----------------------------------------------------------
 zero
-    move.b  #'0',(a2)+ 
+    move.b  #'0',(a0)+ 
     rts
     
 one
-    move.b  #'1',(a2)+
+    move.b  #'1',(a0)+
     rts
     
 two
-    move.b  #'2',(a2)+
+    move.b  #'2',(a0)+
     rts
 
 three
-    move.b  #'3',(a2)+
+    move.b  #'3',(a0)+
     rts
 
 four
-    move.b  #'4',(a2)+
+    move.b  #'4',(a0)+
     rts
     
 five
-    move.b  #'5',(a2)+
+    move.b  #'5',(a0)+
     rts
    
 six
-    move.b  #'6',(a2)+
+    move.b  #'6',(a0)+
     rts
     
 seven
-    move.b  #'7',(a2)+
+    move.b  #'7',(a0)+
     rts
 
 eight
-    move.b  #'8',(a2)+
+    move.b  #'8',(a0)+
     rts
   
 nine
-    move.b  #'9',(a2)+
+    move.b  #'9',(a0)+
     rts
 
 a
-    move.b  #'A',(a2)+
+    move.b  #'A',(a0)+
     rts
   
 b
-    move.b  #'B',(a2)+
+    move.b  #'B',(a0)+
     rts
     
 c
-    move.b  #'C',(a2)+
+    move.b  #'C',(a0)+
     rts
 d
-    move.b  #'D',(a2)+
+    move.b  #'D',(a0)+
     rts
 e
-    move.b  #'E',(a2)+
+    move.b  #'E',(a0)+
     rts
 f
-    move.b  #'F',(a2)+
+    move.b  #'F',(a0)+
     rts
    
 test	dc.w	$1003	
@@ -455,3 +472,8 @@ snp     dc.b    '                _ _                    _                       
 entend  dc.b    'Please enter an ending address: '                                           ,0 
 
     end    start
+
+*~Font name~Courier New~
+*~Font size~10~
+*~Tab type~1~
+*~Tab size~4~
