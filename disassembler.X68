@@ -60,16 +60,11 @@ loop
     
     
 *-----------------------------------------------------------
-*				     Effective Addressing					
+*				     Integrity Checks					
 *-----------------------------------------------------------
-	move.w	test,d0
-	
-	jsr     get_op_code
-	jsr     move_byte
 
-	
-	jsr     compute_address
-	bra     done
+
+
 	
 *-----------------------------------------------------------
 *                         Conversion                  
@@ -518,6 +513,7 @@ snp     dc.b    '                _ _                    _                       
 entend  dc.b    'Please enter an ending address: '                                           ,0 
 
     end    start
+
 
 
 
