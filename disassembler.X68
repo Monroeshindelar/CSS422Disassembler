@@ -214,8 +214,13 @@ check_move_type
     bra     move                    * are we jumping back here or no?
     
 check_add_type
+    jsr     get_source_mode_bits
+    lsr.w   #1,d1
+    cmp.b   #0,d1                       *If the first 2 source mode bits (big endian) is 00, then it's ADDX, which is not supported
+    beq     data
+    
     jsr     get_destination_mode_bits
-    cmp.b   #%0011,d1                   *If the opcode bits (destination mode bits) are 0011 or 0111, then it's ADDA
+    cmp.b   #%0011,d1                   *If the opcode bits (destination mode bits) are 011 or 111, then it's ADDA
     beq     adda
     
     cmp.b   #%0111,d1
@@ -569,6 +574,7 @@ snp     dc.b    '                _ _                    _                       
 entend  dc.b    'Please enter an ending address: '                                           ,0 
 
     end    start
+
 
 
 
