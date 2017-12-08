@@ -179,6 +179,9 @@ get_op_code
 evaluate_operation
     jsr     get_op_code             * May optimize code later to start with checking first 4 bits for validity
     
+    cmp.w   #7,d1                   * checks if the first 4 bits is 0111 (7) which doesn't exist in our supporting list of opcodes
+    beq     data
+    
     cmp.w   #$4E71,d0
     beq     no_op                   * check for NOP
     
@@ -194,6 +197,13 @@ evaluate_operation
     cmp.b   #2,d1
     beq     move_long               * check for MOVE.L
     
+    
+    * MOVEM will go here
+                                    
+                                    
+    cmp.b   #%1101,d1                  * Check for ADD
+    beq     check_add_type
+    
     bra     loop                    * when are we supposed to be looping?...
 
 check_move_type
@@ -201,8 +211,17 @@ check_move_type
     jsr     get_destination_mode_bits
     cmp     #1,d1                   * if destination bits is 001, go to moveA. Otherwise, go to move.
     beq     moveA
-    jsr     move
-    bra     loop
+    bra     move                    * are we jumping back here or no?
+    
+check_add_type
+    jsr     get_destination_mode_bits
+    cmp.b   #%0011,d1                   *If the opcode bits (destination mode bits) are 0011 or 0111, then it's ADDA
+    beq     adda
+    
+    cmp.b   #%0111,d1
+    beq     adda
+    
+    bra     add                         *Otherwise it's just ADD
     
     
 *-----------------------------------------------------------
@@ -326,18 +345,18 @@ move
     move.b  #'O',(a0)+
     move.b  #'V',(a0)+
     move.b  #'E',(a0)+
-    cmp.b   #1,d3
+    cmp.b   #%0001,d3
     beq     size_b
     
-    cmp.b   #3,d3
+    cmp.b   #%0011,d3
     beq     size_w
     
-    cmp.b   #2,d3
+    cmp.b   #%0010,d3
     beq     size_l
 
      
 moveA
-    cmp.b   #1,d3
+    cmp.b   #%0001,d3
     beq     invalid             *MOVEA cannot have byte addressing
     move.b  #'M',(a0)+
     move.b  #'O',(a0)+
@@ -345,10 +364,47 @@ moveA
     move.b  #'E',(a0)+
     move.b  #'A',(a0)+
     
-    cmp.b   #3,d3
+    cmp.b   #%0011,d3
     beq     size_w
     
-    cmp.b   #2,d3
+    cmp.b   #%0010,d3
+    beq     size_l
+    
+add
+    move.b  #'A',(a0)+
+    move.b  #'D',(a0)+
+    move.b  #'D',(a0)+
+    move.b  #' ',(a0)+
+    
+    cmp.b   #%0000,d1
+    beq     size_b
+    
+    cmp.b   #%0100,d1
+    beq     size_b
+    
+    cmp.b   #%0001,d1
+    beq     size_w
+    
+    cmp.b   #%0101,d1
+    beq     size_w
+    
+    cmp.b   #%0010,d1
+    beq     size_l
+    
+    cmp.b   #%0110,d1
+    beq     size_l
+    
+adda
+    move.b  #'A',(a0)+
+    move.b  #'D',(a0)+
+    move.b  #'D',(a0)+
+    move.b  #'A',(a0)+
+    move.b  #' ',(a0)+
+    
+    cmp.b   #%0011,d1
+    beq     size_w
+    
+    cmp.b   #%0111,d1
     beq     size_l
 
 size_b
@@ -513,6 +569,7 @@ snp     dc.b    '                _ _                    _                       
 entend  dc.b    'Please enter an ending address: '                                           ,0 
 
     end    start
+
 
 
 
