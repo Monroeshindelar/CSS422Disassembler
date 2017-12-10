@@ -60,7 +60,7 @@ loop
     cmp.l    a2,a3
     beq      done
     move.w   (a2)+,d0
-    jsr 	    evaluate_operation
+    jsr 	 evaluate_operation
     jsr      print
     bra      loop
     
@@ -252,6 +252,7 @@ get_op_code
 
 evaluate_operation
     jsr     get_op_code                 * May optimize code later to start with checking first 4 bits for validity
+    move.b  d1,d7
     
     cmp.w   #7,d1                       * checks if the first 4 bits is 0111 (7) which doesn't exist in our supporting list of opcodes
     beq     data
@@ -490,6 +491,7 @@ size_b
     move.b  #'.',(a0)+
     move.b  #'B',(a0)+
     move.b  #' ',(a0)+
+    move.b  #1,d7
     jsr     compute_address
     rts
     
@@ -497,6 +499,7 @@ size_w
     move.b  #'.',(a0)+
     move.b  #'W',(a0)+
     move.b  #' ',(a0)+
+    move.b  #2,d7
     jsr     compute_address
     rts
 
@@ -504,6 +507,7 @@ size_l
     move.b  #'.',(a0)+
     move.b  #'L',(a0)+
     move.b  #' ',(a0)+
+    move.b  #3,d7
     jsr     compute_address
     rts
 
@@ -561,7 +565,43 @@ address_post_decrement
     
 immediate_data
     move.b  #'#',(a0)+
-    * Get the immediate data
+    cmp.b   #1,d7
+    simhalt
+    beq     immediate_length_byte
+    cmp.b   #2,d7
+    beq     immediate_length_word
+    bne     immediate_length_long
+    rts
+  
+immediate_length_byte
+    move.w  (a2)+,d0
+    move.w  d0,d2
+    lsl.w   #5,d2
+    lsl.w   #3,d2
+    lsr.w   #3,d2
+    lsr.w   #6,d2
+    lsr.w   #3,d2
+    lea     hex_jump_table,a5
+    mulu.w  #8,d2
+    jsr     (a5,d2)
+    move.w  d0,d1
+    lsl.w   #6,d2
+    lsl.w   #6,d2
+    lsr.w   #6,d2
+    lsr.w   #6,d2
+    mulu.w  #8,d2
+    jsr     (a5,d2)
+    rts
+    
+
+immediate_length_word
+    move.w  (a2)+,d0
+    simhalt
+    rts
+    
+immediate_length_long
+    jsr     immediate_length_word
+    jsr     immediate_length_word
     rts
     
 garbage1
@@ -655,6 +695,8 @@ endinv  dc.b    'Something went very wrong...'                                  
         dc.b    'Exiting the program.'                                                       ,0  
 
     end    start
+
+
 
 
 
