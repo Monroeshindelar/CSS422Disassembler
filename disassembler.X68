@@ -45,18 +45,24 @@ start   org     $1000
     
     jsr     read_file
     
-    simhalt
-    
+    lea     s_notif,a1
+    move.b  #14,d0
+    trap    #15    
+
     jsr     clear_all_data_registers
     lea     $0000,a0
     
+    
+    
+    
 loop
-   cmp      a2,a3
-   beq      done
-   move.w   (a2)+,d0
-   jsr 	    evaluate_operation
-   jsr      print
-   bra      loop
+    lea      $0000,a0
+    cmp.l    a2,a3
+    beq      done
+    move.w   (a2)+,d0
+    jsr 	    evaluate_operation
+    jsr      print
+    bra      loop
     
     
 *-----------------------------------------------------------
@@ -162,6 +168,13 @@ convert_helper
     bra     convert_helper
     
 print
+    move.b  #$00,(a0)
+    lea     $0000,a1
+    moveq   #13,d0
+    trap    #15
+    move.b  #16,d5
+    lea     $0000,a0
+    jsr     clear_address
     rts
 
 return_helper
@@ -178,13 +191,28 @@ clear_all_data_registers
     clr     d7
     rts
     
+clear_address
+    cmp.b   #0,d5
+    beq     return_helper
+    move.b  #$FF,(a0)+
+    subi.b  #1,d5
+    bra     clear_address
+    
 invalid
-    stop    #exit
+    lea     endinv,a1
+    move.b  #14,d0
+    trap    #15
+    bra     exit_prog
 
 done
-    stop    #exit
-	
-	
+    lea     endprog,a1
+    move.b  #14,d0
+    trap    #15
+    
+exit_prog
+    move.b  #9,d0
+    trap    #15
+
 compute_address
     lsl.w   #4,d0
     lsr.w   #4,d0
@@ -620,9 +648,14 @@ snp     dc.b    '                _ _                    _                       
         dc.b    '                                         |_|        |_|   |_|              ',cr,lf
         dc.b    'Welcome to the Salt and Pepper disassembler.'                               ,cr,lf
         dc.b    'Please enter a starting address: '                                          ,0
-entend  dc.b    'Please enter an ending address: '                                           ,0 
+entend  dc.b    'Please enter an ending address: '                                           ,0
+s_notif dc.b    'Starting program deconstruction...'                                         ,cr,lf,0
+endprog dc.b    'Finished deconstruction.'                                                   ,0
+endinv  dc.b    'Something went very wrong...'                                               ,cr,lf
+        dc.b    'Exiting the program.'                                                       ,0  
 
     end    start
+
 
 
 *~Font name~Courier New~
