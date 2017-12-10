@@ -250,7 +250,13 @@ evaluate_operation
     cmp.b   #%1101,d1                   * Check for ADD
     beq     check_add_type
     
-    bra     loop                        * when are we supposed to be looping?...
+    cmp.b   #%1001,d1                   * Check for SUB
+    beq     check_sub_type
+    
+    cmp.b   #%0101,d1                   * Check for SUBQ: Check first 4 bits then diferentiate between other opcodes with the same 4 bits
+    beq     check_subq
+    
+    bra     loop                        * Should we branch to data instead?
 
 check_move_type
     move.b  d1,d3                       * store size of move
@@ -260,12 +266,18 @@ check_move_type
     bra     move                        * are we jumping back here or no?
     
 check_add_type
+    clr     d3
     jsr     get_source_mode_bits
     lsr.w   #1,d1
-    cmp.b   #0,d1                       *If the first 2 source mode bits (big endian) is 00, then it's ADDX, which is not supported
-    beq     data
+    move.b  d1,d3
     
     jsr     get_destination_mode_bits
+    ror.w   #2,d1
+    add.b   d1,d3
+    cmp.b   #1,d3                       *Performing a psuedo AND: adding the first bit of the destination mode bit with the 2 bits from the source mode bits. If the result is 1, it's ADDX, which is not supported
+    beq     data
+    
+    rol.w   #2,d1
     cmp.b   #%0011,d1                   *If the opcode bits (destination mode bits) are 011 or 111, then it's ADDA
     beq     adda
     
@@ -273,6 +285,44 @@ check_add_type
     beq     adda
     
     bra     add                         *Otherwise it's just ADD
+    
+
+check_sub_type
+    clr     d3
+    jsr     get_source_mode_bits
+    lsr.w   #1,d1
+    move.b  d1,d3
+    
+    jsr     get_destination_mode_bits
+    ror.w   #2,d1
+    add.b   d1,d3
+    cmp.b   #1,d3                       *Performing a psuedo AND: adding the first bit of the destination mode bit with the 2 bits from the source mode bits. If the result is 1, it's SUBX, which is not supported
+    beq     data
+
+    rol.w   #2,d1                       *If the opcode bits (destination mode bits) are 011 or 111, then it's SUBA, which is not supported
+    cmp.b   #%0011,d1
+    beq     data
+    
+    cmp.b   #%0111,d1
+    beq     data
+    
+    bra     sub
+    
+check_subq
+    jsr     get_destination_mode_bits
+    lsl.w   #6,d1                       *Checking for the first 2 bits (from the right) without removing the 3rd bit (Move the 3rd bit out of byte range using word size)
+    cmp.b   #$C0,d1                     *Compare bytes only, if the value was %1100 0000, it's either Scc or DBcc, which aren't supported
+    beq     data
+    
+    lsr.w   #8,d1                       *Move the 3rd bit back in byte range and into the 1st digit's spot for checking
+    cmp.b   #0,d1                       *If bit was 0, it's ADDQ which is not supported
+    
+    bra     subq
+    
+    
+    
+    
+
     
     
 *-----------------------------------------------------------
@@ -425,7 +475,6 @@ add
     move.b  #'A',(a0)+
     move.b  #'D',(a0)+
     move.b  #'D',(a0)+
-    move.b  #' ',(a0)+
     
     cmp.b   #%0000,d1
     beq     size_b
@@ -450,7 +499,6 @@ adda
     move.b  #'D',(a0)+
     move.b  #'D',(a0)+
     move.b  #'A',(a0)+
-    move.b  #' ',(a0)+
     
     cmp.b   #%0011,d1
     beq     size_w
@@ -458,6 +506,30 @@ adda
     cmp.b   #%0111,d1
     beq     size_l
 
+sub
+    move.b  #'S',(a0)+
+    move.b  #'U',(a0)+
+    move.b  #'B',(a0)+
+    
+    cmp.b   #%000,d1
+    beq     size_b
+    
+    cmp.b   #%100,d1
+    beq     size_b
+    
+    cmp.b   #%001,d1
+    beq     size_w
+    
+    cmp.b   #%101,d1
+    beq     size_w
+    
+    cmp.b   #%010,d1
+    beq     size_l
+    
+    cmp.b   #%110,d1
+    beq     size_l
+    
+    
 size_b
     move.b  #'.',(a0)+
     move.b  #'B',(a0)+
@@ -623,6 +695,7 @@ snp     dc.b    '                _ _                    _                       
 entend  dc.b    'Please enter an ending address: '                                           ,0 
 
     end    start
+
 
 
 *~Font name~Courier New~
