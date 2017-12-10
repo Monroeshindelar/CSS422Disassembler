@@ -42,13 +42,11 @@ start   org     $1000
     jsr     prepare_to_load_address
     jsr     get_address
     movea.l d2,a3
-
-
-    move.w test,(a2)+
-    move.w #$4E71,(a2)
-
-
-
+    
+    jsr     read_file
+    
+    simhalt
+    
     jsr     clear_all_data_registers
     lea     $0000,a0
     
@@ -57,6 +55,8 @@ loop
    beq      done
    move.w   (a2)+,d0
    jsr 	    evaluate_operation
+   jsr      print
+   bra      loop
     
     
 *-----------------------------------------------------------
@@ -67,10 +67,12 @@ loop
 
 	
 *-----------------------------------------------------------
-*                         Conversion                  
+*                       Conversion                  
 *-----------------------------------------------------------
 convert_to_hex
     move.b  (a1)+,d1
+    beq     return_helper
+    cmp.b   #$FF,d1
     beq     return_helper
     addi.b  #1,d5
     cmpi.b  #$30,d1
@@ -116,7 +118,51 @@ get_address
     add.b   d1,d2
     subi.b  #1,d5
     bra     get_address
-
+    
+read_file
+    lea     f_name,a1
+    move.b  #51,d0
+    trap    #15
+    
+    move.l  #f_size,d2
+    lea     $500,a1
+    move.b  #53,d0
+    trap    #15
+    movea.l a1,a6
+    movea.l a2,a4
+    jsr     convert_file_contents
+    rts
+    
+convert_file_contents
+    clr     d3
+    lea     $00a0,a0
+    cmp.w   #0,d2
+    beq     return_helper
+    move.w  (a1)+,d0
+    move.w  a1,d7
+    lea     $0010,a1
+    move.w  d0,(a1)
+    jsr     convert_to_hex
+    clr     d0
+    move.b  #2,d5
+    lea     $00a0,a0
+    jsr     convert_helper
+    movea.l d7,a1
+    subi.b  #2,d2
+    move.b  d3,(a4)+
+    bra     convert_file_contents
+    
+convert_helper
+    move.b  (a0)+,d0
+    cmp.b   #0,d5
+    beq     return_helper
+    asl.l   #4,d3
+    add.b   d0,d3
+    subi.b  #1,d5
+    bra     convert_helper
+    
+print
+    rts
 
 return_helper
     rts
@@ -177,41 +223,41 @@ get_op_code
 
 
 evaluate_operation
-    jsr     get_op_code             * May optimize code later to start with checking first 4 bits for validity
+    jsr     get_op_code                 * May optimize code later to start with checking first 4 bits for validity
     
-    cmp.w   #7,d1                   * checks if the first 4 bits is 0111 (7) which doesn't exist in our supporting list of opcodes
+    cmp.w   #7,d1                       * checks if the first 4 bits is 0111 (7) which doesn't exist in our supporting list of opcodes
     beq     data
     
     cmp.w   #$4E71,d0
-    beq     no_op                   * check for NOP
+    beq     no_op                       * check for NOP
     
     cmp.w   #$4E75,d0
-    beq     return_to_sub           * check for RTS
+    beq     return_to_sub               * check for RTS
     
-    cmp.b   #01,d1                  * check for MOVE.B
+    cmp.b   #01,d1                      * check for MOVE.B
     beq     check_move_type
     
-    cmp.b   #3,d1                   * check for MOVE.W
+    cmp.b   #3,d1                       * check for MOVE.W
     beq     check_move_type
     
     cmp.b   #2,d1
-    beq     move_long               * check for MOVE.L
+    beq     check_move_type             * check for MOVE.L
     
     
     * MOVEM will go here
                                     
                                     
-    cmp.b   #%1101,d1                  * Check for ADD
+    cmp.b   #%1101,d1                   * Check for ADD
     beq     check_add_type
     
-    bra     loop                    * when are we supposed to be looping?...
+    bra     loop                        * when are we supposed to be looping?...
 
 check_move_type
-    move.b  d1,d3                   * store size of move
+    move.b  d1,d3                       * store size of move
     jsr     get_destination_mode_bits
-    cmp     #1,d1                   * if destination bits is 001, go to moveA. Otherwise, go to move.
+    cmp     #1,d1                       * if destination bits is 001, go to moveA. Otherwise, go to move.
     beq     moveA
-    bra     move                    * are we jumping back here or no?
+    bra     move                        * are we jumping back here or no?
     
 check_add_type
     jsr     get_source_mode_bits
@@ -559,8 +605,11 @@ e
 f
     move.b  #'F',(a0)+
     rts
-   
-test	dc.w	$1003	
+    
+ 
+buffer  dc.w    80
+f_size  dc.b    160
+f_name  dc.b    'opcodes.txt',0
 snp     dc.b    '                _ _                    _                                   ',cr,lf
         dc.b    '               | | |                  | |                                  ',cr,lf
         dc.b    '      ___  __ _| | |_   __ _ _ __   __| | _ __   ___ _ __  _ __   ___ _ __ ',cr,lf
@@ -574,10 +623,6 @@ snp     dc.b    '                _ _                    _                       
 entend  dc.b    'Please enter an ending address: '                                           ,0 
 
     end    start
-
-
-
-
 
 
 *~Font name~Courier New~
