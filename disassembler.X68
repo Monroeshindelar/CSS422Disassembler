@@ -314,6 +314,7 @@ check_subq
     cmp.b   #$C0,d1                     *Compare bytes only, if the value was %1100 0000, it's either Scc or DBcc, which aren't supported
     beq     data
     
+    move.b  d1,d3                       *Storing bits into d3 for checking size
     lsr.w   #8,d1                       *Move the 3rd bit back in byte range and into the 1st digit's spot for checking
     cmp.b   #0,d1                       *If bit was 0, it's ADDQ which is not supported
     
@@ -527,6 +528,21 @@ sub
     beq     size_l
     
     cmp.b   #%110,d1
+    beq     size_l
+    
+suba
+    move.b  #'S',(a0)+
+    move.b  #'U',(a0)+
+    move.b  #'B',(a0)+
+    move.b  #'Q',(a0)+
+    
+    cmp.b   #$00,d3        * I use d3 here because I shifted the size bits all the way to the left and stored them in d3 to save computation and space
+    beq     size_b
+    
+    cmp.b   #$40,d3
+    beq     size_w
+    
+    cmp.b   #$80,d3
     beq     size_l
     
     
