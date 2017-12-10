@@ -223,7 +223,7 @@ get_op_code
 
 
 evaluate_operation
-    jsr     get_op_code                 * May optimize code later to start with checking first 4 bits for validity
+    jsr     get_op_code                 * May put check for 0100 opcodes up here later
     
     cmp.w   #7,d1                       * checks if the first 4 bits is 0111 (7) which doesn't exist in our supporting list of opcodes
     beq     data
@@ -244,7 +244,8 @@ evaluate_operation
     beq     check_move_type             * check for MOVE.L
     
     
-    * MOVEM will go here
+    cmp.b   #4,d1
+    beq     0100_Opcodes                * Branch to code that checks through a set of opcodes with 0100 as their start (big endian)
                                     
                                     
     cmp.b   #%1101,d1                   * Check for ADD
@@ -321,6 +322,84 @@ check_subq
     bra     subq
     
     
+    
+0100_Opcodes                            * Supported 0100 opcodes: MOVEM, LEA, NEG, and JSR
+    jsr     get_destination_mode_bits
+    lsr     #1,d1
+    move.b  d1,d3
+    
+    jsr     get_destination_register_bits
+    lsl.w   #7,d1
+    add.b   d1,d3
+    
+    lsl.w   #8,d1
+    add.b   d1,d3                       * Another pseudo AND operation. I made this one really weird (JJ)
+    
+    cmp.b   #%10,d3
+    beq     check_moveM                 * This could be a MOVEM operation. Checking if it's valid
+    
+    
+    
+check_movem
+    jsr     get_source_mode_bits
+    cmp.b   #%010,d1
+    beq     moveM
+    
+    cmp.b   #%101,d1
+    beq     moveM
+    
+    cmp.b   #%110,d1
+    beq     moveM
+    
+    cmp.b   #%111,d1
+    beq     check_moveM_reg
+    
+    move.b  d1,d3
+    jsr     get_destination_register_bits
+    lsl.b   #6,d1
+    lsr.b   #7,d1                       * Isolate the directional bit
+    
+    cmp.b   #1,d1
+    beq     moveM_memToReg
+    
+    cmp.b   #%100,d3
+    beq     moveM
+    
+    
+    bra     data                        * Otherwise, it's not MOVEM
+
+check_moveM_reg
+    jsr     get_source_register_bits
+    cmp.b   #%000,d1
+    beq     moveM
+    
+    cmp.b   #%001,d1
+    beq     moveM
+    
+    move.b  d1,d3
+    jsr     get_destination_register_bits
+    lsl.b   #6,d1
+    lsr.b   #7,d1                       * Isolate the directional bit
+    
+    cmp.b   #1,d1
+    beq     moveM_memToReg111
+    
+    bra     data                        * Otherwise, it's not MOVEM
+    
+moveM_memToReg111                       * This section checks the available 111 addressing modes in memory to register mode
+    cmp.b   #%010,d3
+    beq     moveM
+    
+    cmp.b   #%011,d3
+    beq     moveM
+    
+    bra     data                        * Otherwise, it's not MOVEM
+
+moveM_memToReg                          * This section checks addressing modes that are available in memory to register mode
+    cmp.b   #%011,d3
+    beq     moveM
+    
+    bra     data                        * otherwise it's not MOVEM
     
     
 
@@ -471,6 +550,23 @@ moveA
     
     cmp.b   #%0010,d3
     beq     size_l
+    
+    
+moveM
+    move.b  #'M',(a0)+
+    move.b  #'O',(a0)+
+    move.b  #'V',(a0)+
+    move.b  #'E',(a0)+
+    move.b  #'M',(a0)+
+
+    jsr     get_destination_mode_bits
+    lsl.b   #7,d1
+    lsr.b   #7,d1
+    
+    cmp.b   #0,d1
+    beq     size_w
+    
+    bra     size_l
     
 add
     move.b  #'A',(a0)+
