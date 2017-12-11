@@ -711,14 +711,19 @@ check_or_source_register1
     lsr.w   #6,d1
     
     cmp.b   #$22,d1
-    beq     check_bclr                          * Check if valid BCLR
+    beq     check_bclr                         * Check if valid BCLR (static)
+    move.b  d1,d3
     
-    lsr.w   #2,d1
+    jsr     get_destination_mode_bits
+    cmp.b   #%110,d1
+    beq     check_bclr                         * Check if valid BCLR (dynamic)
     
-    cmp.b   #0,d1
-    beq     check_ori                           * Check if valid ORI
+    lsr.w   #2,d3
     
-    cmp.b   #$C,d1
+    cmp.b   #0,d3
+    beq     check_ori                          * Check if valid ORI
+    
+    cmp.b   #$C,d3
     beq     check_cmpi                          * Check if valid CMPI
     
     bra     data                                * Otherwise, it's DATA
@@ -745,6 +750,47 @@ check_ori_source_register
     bgt     data
     
     bra     ori
+    
+check_bclr                                      * checks for valid source modes in BCLR static
+    jsr     get_source_mode_bits
+    cmp.b   #%001,d1                            * cannot use direct address mode
+    beq     data
+    
+    cmp.b   #%111,d1
+    beq     check_bclr_source_register
+    
+    bra     bclr
+    
+check_bclr_source_register
+    jsr     get_source_register_bits
+    cmp.b   #1,d1
+    bgt     data
+    
+    bra     bclr
+    
+check_cmpi
+    jsr     get_destination_mode_bits
+    cmp.b   #%11,d1
+    beq     data                                * size cannot be 011
+    
+    move.b  d1,d3
+    
+    jsr     get_source_mode_bits
+    cmp.b   #%001,d1
+    beq     data
+    
+    cmp.b   #%111,d1
+    beq     check_cmpi_source_register
+    
+    bra     cmpi
+    
+check_cmpi_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%011,d1
+    bgt     data
+    
+    bra     cmpi
+    
  
 *-----------------------------------------------------------
 *				    Get Destination Register					
@@ -1061,6 +1107,32 @@ ori
     
     bra     size_l
     
+bclr
+    move.b  #'B',(a0)+
+    move.b  #'C',(a0)+
+    move.b  #'L',(a0)+
+    move.b  #'R',(a0)+
+    
+    jsr     get_source_mode_bits
+    cmp.b   #%000,d1
+    beq     size_l
+    
+    bra     size_b
+    
+cmpi
+    move.b  #'C',(a0)+
+    move.b  #'M',(a0)+
+    move.b  #'P',(a0)+
+    move.b  #'I',(a0)+
+    
+    cmp.b   #%00,d3
+    beq     size_b
+    
+    cmp.b   #%01,d3
+    beq     size_w
+    
+    bra     size_l
+    
     
 size_b
     move.b  #'.',(a0)+
@@ -1270,6 +1342,7 @@ endinv  dc.b    'Something went very wrong...'                                  
         dc.b    'Exiting the program.'                                                       ,0  
 
     end    start
+
 
 
 
