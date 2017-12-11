@@ -301,7 +301,10 @@ evaluate_operation
     cmp.b   #$E,d1
     beq     1110_Opcodes                * Check for ASd, LSd, or ROd
     
-    bra     loop                        * Should we branch to data instead?
+    cmp.b   #$6,d1
+    beq     0110_Opcodes                * Check for Bcc or BRA
+    
+    bra     data                        * Otherwise, it's data
 
 check_move_type
     move.b  d1,d3                       * store size of move
@@ -956,7 +959,82 @@ check_rod_memory_shift_register                        *checks rod memory shift 
     
     bra     rod
 
+0110_Opcodes
+    move.w  d0,d1
+    lsr.w   #8,d1
+    
+    cmp.b   #$60,d1
+    beq     check_bra
+    
+    cmp.b   #$61,d1
+    beq     data
+    
+    bra     check_Bcc_type
+    
+check_bra
+    move.w  d0,d1
+    cmp.b   #$FE,d1
+    beq     bra
+    
+    cmp.b   #$00,d1
+    beq     bra
+    
+    bra     data
 
+check_Bcc_type
+    cmp.b   #$65,d1
+    beq     check_bcs
+    
+    cmp.b   #$6C,d1
+    beq     check_bge
+    
+    cmp.b   #$6D,d1
+    beq     check_blt
+    
+    cmp.b   #$68,d1
+    beq     check_bvc
+    
+    bra     data
+    
+check_bcs
+    move.w  d0,d1
+    cmp.b   #$FE,d1
+    beq     bcs
+    
+    cmp.b   #$00,d1
+    beq     bcs
+    
+    bra     data
+    
+check_bge
+    move.w  d0,d1
+    cmp.b   #$FE,d1
+    beq     bge
+    
+    cmp.b   #$00,d1
+    beq     bge
+    
+    bra     data
+
+check_blt
+    move.w  d0,d1
+    cmp.b   #$FE,d1
+    beq     blt
+    
+    cmp.b   #$00,d1
+    beq     blt
+    
+    bra     data
+
+check_bvc
+    move.w  d0,d1
+    cmp.b   #$FE,d1
+    beq     bvc
+    
+    cmp.b   #$00,d1
+    beq     bvc
+    
+    bra     data
     
  
 *-----------------------------------------------------------
@@ -1202,7 +1280,7 @@ jsr
     jsr     compute_address
     rts
     
-*-----------------------------------To be fixed later--------------------------------------------    
+*-----------------------------------To be fixed later--------------------------------------
 muls
     move.b  #'M',(a0)+
     move.b  #'U',(a0)+
@@ -1347,6 +1425,58 @@ rod
     
     jsr     check_direction
     bra     check_shift_size
+    
+bra
+    move.b  #'B',(a0)+
+    move.b  #'R',(a0)+
+    move.b  #'A',(a0)+
+    
+    cmp.b   #$FE,d1
+    beq     size_s
+    
+    bra     size_w
+    
+bcs
+    move.b  #'B',(a0)+
+    move.b  #'C',(a0)+
+    move.b  #'S',(a0)+
+    
+    cmp.b   #$FE,d1
+    beq     size_s
+    
+    bra     size_w
+    
+bge
+    move.b  #'B',(a0)+
+    move.b  #'G',(a0)+
+    move.b  #'E',(a0)+
+    
+    cmp.b   #$FE,d1
+    beq     size_s
+    
+    bra     size_w
+    
+blt
+    move.b  #'B',(a0)+
+    move.b  #'L',(a0)+
+    move.b  #'T',(a0)+
+    
+    cmp.b   #$FE,d1
+    beq     size_s
+    
+    bra     size_w
+    
+    
+bvc
+    move.b  #'B',(a0)+
+    move.b  #'V',(a0)+
+    move.b  #'C',(a0)+
+    
+    cmp.b   #$FE,d1
+    beq     size_s
+    
+    bra     size_w
+    
 
 check_shift_size
     cmp.b   #%11,d1
@@ -1394,6 +1524,13 @@ size_l
     move.b  #'L',(a0)+
     move.b  #' ',(a0)+
     move.b  #3,d7
+    jsr     compute_address
+    rts
+    
+size_s
+    move.b  #'.',(a0)+
+    move.b  #'S',(a0)+
+    move.b  #' ',(a0)+
     jsr     compute_address
     rts
 
