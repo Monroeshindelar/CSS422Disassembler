@@ -250,9 +250,9 @@ get_op_code
     rts
 
 
-evaluate_operation
-    jsr     get_op_code                 * May optimize code later to start with checking first 4 bits for validity
-    move.b  d1,d7
+
+    jsr     get_op_code                 * May put check for 0100 opcodes up here later
+
     
     cmp.w   #7,d1                       * checks if the first 4 bits is 0111 (7) which doesn't exist in our supporting list of opcodes
     beq     data
@@ -273,36 +273,333 @@ evaluate_operation
     beq     check_move_type             * check for MOVE.L
     
     
-    * MOVEM will go here
+    cmp.b   #4,d1
+    beq     0100_Opcodes                * Branch to code that checks through a set of opcodes with 0100 as their start (big endian)
                                     
                                     
     cmp.b   #%1101,d1                   * Check for ADD
     beq     check_add_type
     
-    bra     loop                        * when are we supposed to be looping?...
+    cmp.b   #%1001,d1                   * Check for SUB
+    beq     check_sub_type
+    
+    cmp.b   #%0101,d1                   * Check for SUBQ: Check first 4 bits then diferentiate between other opcodes with the same 4 bits
+    beq     check_subq
+    
+    bra     loop                        * Should we branch to data instead?
 
 check_move_type
     move.b  d1,d3                       * store size of move
-    jsr     get_destination_mode_bits
-    cmp     #1,d1                       * if destination bits is 001, go to moveA. Otherwise, go to move.
-    beq     moveA
-    bra     move                        * are we jumping back here or no?
-    
-check_add_type
     jsr     get_source_mode_bits
-    lsr.w   #1,d1
-    cmp.b   #0,d1                       *If the first 2 source mode bits (big endian) is 00, then it's ADDX, which is not supported
+    cmp     #%111,d1                    * If source mode bits are 111
+    beq     check_move_source_register  
+    
+continue_move_check
+    jsr     get_destination_mode_bits
+    cmp.b   #%001,d1
+    beq     moveA                       * If destination mode bits are 001, it's MOVEA
+    
+    cmp.b   #%111,d1
+    beq     check_move_destination_register     * If destination mode is 111, check the register for validity
+    
+    bra     move                        *Otherwise, it's a valid MOVE
+
+check_move_destination_register
+    jsr     get_destination_register_bits
+    cmp.b   #1,d1
+    bgt     data                          * If register bit is greater than 1, it's DATA
+    
+    bra     move                          * Otherwise, it's a valid MOVE
+    
+check_move_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%100,d1
+    bgt     data                            *If register bits are greater than %100, its invalid
+    
+    bra    continue_move_check
+    
+
+check_add_type
+    jsr     get_destination_mode_bits
+    move.b  d1,d3                           *Storing size in d3
+    
+    lsl.b   #6,d3                           *Isolating size bits
+    lsr.b   #6,d3
+    lsr.b   #2,d1                           *Isolating direction bit in D1
+    
+    cmp.b   #%11,d3
+    beq     check_addA_mode                 * If size bits are 11, it's ADDA
+    
+    cmp.b   #1,d1                           * If directional bit is 1 (EA Destination), check available addressing modes for that
+    beq     add_EA_destination_type
+    
+    jsr     get_source_mode_bits            * Otherwise, it uses a data register as the destination (<ea> + Dn -> Dn), so check the available addressing for that
+    cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
+    beq     check_add_source_register
+    
+       
+    bra     add                             *Otherwise it's just ADD
+    
+add_EA_destination_type
+    jsr     get_source_mode_bits
+    cmp.b   #%001,d1
+    ble     data                            * If source mode bits are less than or equal to 1, it's invalid
+    
+    cmp.b   #%111,d1
+    beq     check_add_source_registerEA     * Checks available register bits for mode 111 in EA Destination mode
+    
+    bra     add                             * Otherwise, it's a legit ADD
+    
+check_add_source_registerEA
+    jsr     get_source_register_bits
+    cmp.b   #%01,d1
+    bgt     data                            * register bits cannot be greater than 1
+    
+    bra     add                             * otherwise it's a valid ADD
+check_add_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%100,d1
+    bgt     data                            * If register bits are greater than 4, it's invalid
+    
+    bra     add                             * Otherwise, it's a valid ADD
+    
+check_addA_mode
+    move.b  d1,d3                           * Move the size bit into d3
+    jsr     get_source_mode_bits
+    cmp.b   #%111,d1
+    beq     check_addA_source_register      * If mode bits are 111, validate the register bits
+    
+    bra     addA                           * Else, it's a legit ADDA
+check_addA_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%100,d1                        * Register bits cannot exceed 4
+    bgt     data
+        
+    bra     addA                            * else, it's a legit ADDA
+    
+    
+check_sub_type
+    jsr     get_destination_mode_bits
+    move.b  d1,d3                           *Storing size in d3
+    
+    lsl.b   #6,d3                           *Isolating size bits
+    lsr.b   #6,d3
+    lsr.b   #2,d1                           *Isolating direction bit in D1
+    
+    cmp.b   #%11,d3
+    beq     data                            * If size bits are 11, it's not valid
+    
+    cmp.b   #1,d1                           * If directional bit is 1 (EA Destination), check available addressing modes for that
+    beq     sub_EA_destination_type
+    
+    jsr     get_source_mode_bits            * Otherwise, it uses a data register as the destination (Dn - <ea> -> Dn), so check the available addressing for that
+    cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
+    beq     check_sub_source_register
+  
+    bra     sub                             *Otherwise it's just SUB
+
+sub_EA_destination_type
+    jsr     get_source_mode_bits
+    cmp.b   #%001,d1
+    ble     data                            * If mode bits are less than or equal to 1, it's invalid
+    
+    cmp.b   #%111,d1
+    beq     check_sub_source_registerEA
+    
+    bra     sub
+
+check_sub_source_registerEA
+    jsr     get_source_register_bits
+    cmp.b   #%001,d1
+    bgt     data
+    
+    bra     sub
+check_sub_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%100,d1
+    bgt     data
+    
+    bra     sub
+    
+check_subq
+    jsr     get_destination_mode_bits
+    move.b  d1,d3
+    lsl.b   #6,d3
+    lsr.b   #6,d3                       * Storing size in d3
+    cmp.b   #%11,d3                     * If size was 11, it's invalid because those bits are reserved for Scc and DBcc, which are not supported
     beq     data
     
+    lsr.b   #2,d1                       * Isolating the last bit of the destination mode
+    cmp.b   #0,d1                       * If bit was 0, it's ADDQ which is not supported
+    beq     data
+    
+    jsr     get_source_mode_bits        * Now checking if the source mode bits is 111
+    cmp.b   #%111,d1
+    beq     check_subq_source_register  * check for valid registers
+    
+    bra     subq                        * Otherwise it's a legit subq
+ 
+check_subq_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%001,d1
+    bgt     data                        * If register bits are greater than 1, it's invalid
+    
+    bra     subq                        * Otherwise it's a legit subq
+    
+    
+0100_Opcodes                            * Supported 0100 opcodes: MOVEM, LEA, NEG, and JSR
+    move.w  d0,d1
+    ror.w   #8,d1
+    cmp.b   #$44,d1                     * Checking the 4 bits after the first 4 (big endian)
+    beq     check_neg                   * If it's %0100, check if it's a valid NEG
+    
+    rol.w   #2,d1
+    cmp.b   #$3A,d1
+    beq     check_jsr                   * Really weird way of checking if jsr
+    
     jsr     get_destination_mode_bits
-    cmp.b   #%0011,d1                   *If the opcode bits (destination mode bits) are 011 or 111, then it's ADDA
-    beq     adda
+    cmp.b   #%111,d1
+    beq     check_lea                   * If destination mode bits is 111, it could be LEA
     
-    cmp.b   #%0111,d1
-    beq     adda
+    lsr     #1,d1
+    move.b  d1,d3
     
-    bra     add                         *Otherwise it's just ADD
+    jsr     get_destination_register_bits
+    lsl.w   #7,d1
+    add.b   d1,d3
     
+    lsl.w   #8,d1
+    add.b   d1,d3                       * A really weird pseudo AND operation
+    
+    cmp.b   #%10,d3
+    beq     check_moveM                 * This could be a MOVEM operation. Checking if it's valid
+    
+    
+    bra     data                        * Otherwise, it's invalid
+
+
+check_neg
+    jsr     get_destination_mode_bits
+    cmp.b   #%11,d1
+    beq     data                        * If size bits is %11, it's invalid
+    
+    move.b  d1,d3                       * store the size in d3
+    jsr     get_source_mode_bits
+    cmp.b   #%001,d1
+    beq     data                        * If mode bits is 001, it's invalid
+    
+    cmp.b   #%111,d1
+    beq     check_neg_source_register   * If mode bits is 111, check for valid register bits
+    
+    bra     neg                         * Otherwise, it's a valid NEG
+
+check_neg_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%001,d1
+    bgt     data                        * If register bits is greater than 1, it's invalid
+    
+    bra     neg                         * otherwise, it's a valid NEG
+    
+
+check_jsr
+    jsr     get_source_mode_bits
+    cmp.b   #%010,d1                    * Valid mode bits are 010, 101, 110, and 111 with specific register bits
+    beq     jsr
+    
+    cmp.b   #%101,d1
+    beq     jsr
+    
+    cmp.b   #%110,d1
+    beq     jsr
+    
+    cmp.b   #%111,d1
+    beq     check_jsr_source_register   * If 111, check register bits for validity
+    
+    bra     data                        * Otherwise, it's invalid
+
+check_jsr_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%011,d1
+    bgt     data                        * If register bits is over 3, it's invalid
+    
+    bra     jsr                         * Otherwise, it's a valid JSR
+    
+    
+check_lea
+    jsr     get_source_mode_bits
+    cmp.b   #%010,d1
+    beq     lea
+    
+    cmp.b   #%101,d1
+    beq     lea
+    
+    cmp.b   #%110,d1
+    beq     lea
+    
+    cmp.b   #%111,d1
+    beq     check_lea_source_register
+    
+    bra     data                        * Otherwise it's invalid               
+    
+check_lea_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%011,d1
+    bgt     data                        * If register bits is greater than 3, it's invalid
+    
+    bra     lea                         * Otherwise it's a valid LEA
+
+    
+check_movem
+    jsr     get_source_mode_bits
+    move.b  d1,d3
+    cmp.b   #%010,d3
+    beq     moveM
+    
+    cmp.b   #%101,d3
+    beq     moveM
+    
+    cmp.b   #%110,d3
+    beq     moveM
+    
+    jsr     get_destination_register_bits
+    lsl.b   #6,d1
+    lsr.b   #7,d1                       * Isolate the directional bit
+    
+    cmp.b   #%111,d3
+    beq     check_moveM_reg
+    
+    cmp.b   #1,d1
+    beq     moveM_memToReg
+    
+    cmp.b   #%100,d3
+    beq     moveM
+    
+    bra     data                        * Otherwise, it's not MOVEM
+
+check_moveM_reg                         *This section checks the direction if it's memory to register. If not, it checks for valid register to memory 111 address modes
+    cmp.b   #1,d1                       *d1 holds the destination register bit
+    beq     moveM_memToReg111
+    
+    jsr     get_source_register_bits
+    cmp.b   #1,d1                       *If register bits are greater than 1, it's DATA
+    bgt     data
+    
+    bra     moveM                       * Otherwise, it's a legit MOVEM
+    
+moveM_memToReg111                       * This section checks the available 111 addressing modes in memory to register mode
+    jsr     get_source_register_bits
+    cmp.b   #3,d1
+    bgt     data                        * If register bits are greater than 3 it's DATA
+    
+    bra     moveM                        * Otherwise, it's a legit MOVEM
+
+moveM_memToReg                          * This section checks addressing modes that are available in memory to register mode (excluding 111 mode)
+    cmp.b   #%011,d3
+    beq     moveM
+    
+    bra     data                        * otherwise it's not MOVEM
+    
+
     
 *-----------------------------------------------------------
 *				    Get Destination Register					
@@ -437,7 +734,7 @@ move
      
 moveA
     cmp.b   #%0001,d3
-    beq     invalid             *MOVEA cannot have byte addressing
+    beq     data             *MOVEA cannot have byte addressing
     move.b  #'M',(a0)+
     move.b  #'O',(a0)+
     move.b  #'V',(a0)+
@@ -450,43 +747,103 @@ moveA
     cmp.b   #%0010,d3
     beq     size_l
     
+    
+moveM
+    move.b  #'M',(a0)+
+    move.b  #'O',(a0)+
+    move.b  #'V',(a0)+
+    move.b  #'E',(a0)+
+    move.b  #'M',(a0)+
+
+    jsr     get_destination_mode_bits
+    lsl.b   #7,d1
+    lsr.b   #7,d1
+    
+    cmp.b   #0,d1
+    beq     size_w
+    
+    bra     size_l
+    
 add
     move.b  #'A',(a0)+
     move.b  #'D',(a0)+
     move.b  #'D',(a0)+
-    move.b  #' ',(a0)+
     
-    cmp.b   #%0000,d1
+    cmp.b   #%00,d3
     beq     size_b
     
-    cmp.b   #%0100,d1
-    beq     size_b
-    
-    cmp.b   #%0001,d1
+    cmp.b   #%01,d3
     beq     size_w
     
-    cmp.b   #%0101,d1
-    beq     size_w
+    bra     size_l
     
-    cmp.b   #%0010,d1
-    beq     size_l
-    
-    cmp.b   #%0110,d1
-    beq     size_l
-    
-adda
+addA
     move.b  #'A',(a0)+
     move.b  #'D',(a0)+
     move.b  #'D',(a0)+
     move.b  #'A',(a0)+
-    move.b  #' ',(a0)+
     
-    cmp.b   #%0011,d1
+    cmp.b   #0,d3
     beq     size_w
     
-    cmp.b   #%0111,d1
-    beq     size_l
+    bra     size_l
 
+sub
+    move.b  #'S',(a0)+
+    move.b  #'U',(a0)+
+    move.b  #'B',(a0)+
+    
+    cmp.b   #%00,d3
+    beq     size_b
+    
+    cmp.b   #%01,d3
+    beq     size_w
+    
+    bra     size_l
+    
+subq
+    move.b  #'S',(a0)+
+    move.b  #'U',(a0)+
+    move.b  #'B',(a0)+
+    move.b  #'Q',(a0)+
+    
+    cmp.b   #%00,d3        
+    beq     size_b
+    
+    cmp.b   #%01,d3
+    beq     size_w
+    
+    bra     size_l
+    
+lea
+    move.b  #'L',(a0)+
+    move.b  #'E',(a0)+
+    move.b  #'A',(a0)+
+    move.b  #' ',(a0)+
+    jsr     compute_address
+    rts
+    
+neg
+    move.b  #'N',(a0)+
+    move.b  #'E',(a0)+
+    move.b  #'G',(a0)+
+    
+    cmp.b   #%00,d3
+    beq     size_b
+    
+    cmp.b   #%01,d3
+    beq     size_w
+    
+    bra     size_l
+    
+jsr
+    move.b  #'J',(a0)+
+    move.b  #'S',(a0)+
+    move.b  #'R',(a0)+
+    move.b  #' ',(a0)+
+    jsr     compute_address
+    rts
+    
 size_b
     move.b  #'.',(a0)+
     move.b  #'B',(a0)+
@@ -695,8 +1052,6 @@ endinv  dc.b    'Something went very wrong...'                                  
         dc.b    'Exiting the program.'                                                       ,0  
 
     end    start
-
-
 
 
 
