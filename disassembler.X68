@@ -394,20 +394,35 @@ check_sub_source_register
     
 check_subq
     jsr     get_destination_mode_bits
-    lsl.w   #6,d1                       *Checking for the first 2 bits (from the right) without removing the 3rd bit (Move the 3rd bit out of byte range using word size)
-    cmp.b   #$C0,d1                     *Compare bytes only, if the value was %1100 0000, it's either Scc or DBcc, which aren't supported
+    move.b  d1,d3
+    lsl.b   #6,d3
+    lsr.b   #6,d3                       * Storing size in d3
+    cmp.b   #%11,d3                     * If size was 11, it's invalid because those bits are reserved for Scc and DBcc, which are not supported
     beq     data
     
-    move.b  d1,d3                       *Storing bits into d3 for checking size
-    lsr.w   #8,d1                       *Move the 3rd bit back in byte range and into the 1st digit's spot for checking
-    cmp.b   #0,d1                       *If bit was 0, it's ADDQ which is not supported
+    lsr.b   #2,d1                       * Isolating the last bit of the destination mode
+    cmp.b   #0,d1                       * If bit was 0, it's ADDQ which is not supported
+    beq     data
     
-    bra     subq
+    jsr     get_source_mode_bits        * Now checking if the source mode bits is 111
+    cmp.b   #%111,d1
+    beq     check_subq_source_register  * check for valid registers
     
+    bra     subq                        * Otherwise it's a legit subq
+ 
+check_subq_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%001,d1
+    bgt     data                        * If register bits are greater than 1, it's invalid
+    
+    bra     subq                        * Otherwise it's a legit subq
     
     
 0100_Opcodes                            * Supported 0100 opcodes: MOVEM, LEA, NEG, and JSR
     jsr     get_destination_mode_bits
+    cmp.b   #%111,d1
+    beq     check_lea                   * If destination mode bits is 111, it could be LEA
+    
     lsr     #1,d1
     move.b  d1,d3
     
@@ -421,7 +436,38 @@ check_subq
     cmp.b   #%10,d3
     beq     check_moveM                 * This could be a MOVEM operation. Checking if it's valid
     
+    move.w  d0,d1
+    lsr.w   #8,d1
+    cmp.b   #$44,d1                     * Checking the 4 bits after the first 4 (big endian)
+    beq     check_neg                   * If it's %0100, check if it's a valid NEG
     
+    
+    
+    bra     data                        * Otherwise, it's invalid
+
+
+check_lea
+    jsr     get_source_mode_bits
+    cmp.b   #%010,d1
+    beq     lea
+    
+    cmp.b   #%101,d1
+    beq     lea
+    
+    cmp.b   #%110,d1
+    beq     lea
+    
+    cmp.b   #%111,d1
+    beq     check_lea_source_register
+    
+    bra     data                        * Otherwise it's invalid               
+    
+check_lea_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%011,d1
+    bgt     data                        * If register bits is greater than 3, it's invalid
+    
+    bra     lea                         * Otherwise it's a valid LEA
     
 check_movem
     jsr     get_source_mode_bits
@@ -448,7 +494,6 @@ check_movem
     cmp.b   #%100,d3
     beq     moveM
     
-    
     bra     data                        * Otherwise, it's not MOVEM
 
 check_moveM_reg                         *This section checks the direction if it's memory to register. If not, it checks for valid register to memory 111 address modes
@@ -474,9 +519,29 @@ moveM_memToReg                          * This section checks addressing modes t
     
     bra     data                        * otherwise it's not MOVEM
     
+check_neg
+    jsr     get_destination_mode_bits
+    cmp.b   #%11,d1
+    beq     data                        * If size bits is %11, it's invalid
+    
+    move.b  d1,d3                       * store the size in d3
+    jsr     get_source_mode_bits
+    cmp.b   #%001,d1
+    beq     data                        * If mode bits is 001, it's invalid
+    
+    cmp.b   #%111,d1
+    beq     check_neg_source_register   * If mode bits is 111, check for valid register bits
+    
+    bra     neg                         * Otherwise, it's a valid NEG
+
+check_neg_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%001,d1
+    bgt     data                        * If register bits is greater than 1, it's invalid
+    
+    bra     neg                         * otherwise, it's a valid NEG
     
 
-    
     
 *-----------------------------------------------------------
 *				    Get Destination Register					
@@ -652,8 +717,7 @@ add
     cmp.b   #%01,d3
     beq     size_w
     
-    cmp.b   #%10,d3
-    beq     size_l
+    bra     size_l
     
 addA
     move.b  #'A',(a0)+
@@ -664,47 +728,55 @@ addA
     cmp.b   #0,d3
     beq     size_w
     
-    cmp.b   #1,d3
-    beq     size_l
+    bra     size_l
 
 sub
     move.b  #'S',(a0)+
     move.b  #'U',(a0)+
     move.b  #'B',(a0)+
     
-    cmp.b   #%000,d1
+    cmp.b   #%00,d3
     beq     size_b
     
-    cmp.b   #%100,d1
-    beq     size_b
-    
-    cmp.b   #%001,d1
+    cmp.b   #%01,d3
     beq     size_w
     
-    cmp.b   #%101,d1
-    beq     size_w
+    bra     size_l
     
-    cmp.b   #%010,d1
-    beq     size_l
-    
-    cmp.b   #%110,d1
-    beq     size_l
-    
-suba
+subq
     move.b  #'S',(a0)+
     move.b  #'U',(a0)+
     move.b  #'B',(a0)+
     move.b  #'Q',(a0)+
     
-    cmp.b   #$00,d3        * I use d3 here because I shifted the size bits all the way to the left and stored them in d3 to save computation and space
+    cmp.b   #%00,d3        
     beq     size_b
     
-    cmp.b   #$40,d3
+    cmp.b   #%01,d3
     beq     size_w
     
-    cmp.b   #$80,d3
-    beq     size_l
+    bra     size_l
     
+lea
+    move.b  #'L',(a0)+
+    move.b  #'E',(a0)+
+    move.b  #'A',(a0)+
+    move.b  #' ',(a0)+
+    jsr     compute_address
+    rts
+    
+neg
+    move.b  #'N',(a0)+
+    move.b  #'E',(a0)+
+    move.b  #'G',(a0)+
+    
+    cmp.b   #%00,d3
+    beq     size_b
+    
+    cmp.b   #%01,d3
+    beq     size_w
+    
+    bra     size_l
     
 size_b
     move.b  #'.',(a0)+
