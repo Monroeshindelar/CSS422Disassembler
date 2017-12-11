@@ -419,6 +419,15 @@ check_subq_source_register
     
     
 0100_Opcodes                            * Supported 0100 opcodes: MOVEM, LEA, NEG, and JSR
+    move.w  d0,d1
+    ror.w   #8,d1
+    cmp.b   #$44,d1                     * Checking the 4 bits after the first 4 (big endian)
+    beq     check_neg                   * If it's %0100, check if it's a valid NEG
+    
+    rol.w   #2,d1
+    cmp.b   #$3A,d1
+    beq     check_jsr                   * Really weird way of checking if jsr
+    
     jsr     get_destination_mode_bits
     cmp.b   #%111,d1
     beq     check_lea                   * If destination mode bits is 111, it could be LEA
@@ -431,21 +440,62 @@ check_subq_source_register
     add.b   d1,d3
     
     lsl.w   #8,d1
-    add.b   d1,d3                       * Another pseudo AND operation. I made this one really weird (JJ)
+    add.b   d1,d3                       * A really weird pseudo AND operation
     
     cmp.b   #%10,d3
     beq     check_moveM                 * This could be a MOVEM operation. Checking if it's valid
-    
-    move.w  d0,d1
-    lsr.w   #8,d1
-    cmp.b   #$44,d1                     * Checking the 4 bits after the first 4 (big endian)
-    beq     check_neg                   * If it's %0100, check if it's a valid NEG
-    
     
     
     bra     data                        * Otherwise, it's invalid
 
 
+check_neg
+    jsr     get_destination_mode_bits
+    cmp.b   #%11,d1
+    beq     data                        * If size bits is %11, it's invalid
+    
+    move.b  d1,d3                       * store the size in d3
+    jsr     get_source_mode_bits
+    cmp.b   #%001,d1
+    beq     data                        * If mode bits is 001, it's invalid
+    
+    cmp.b   #%111,d1
+    beq     check_neg_source_register   * If mode bits is 111, check for valid register bits
+    
+    bra     neg                         * Otherwise, it's a valid NEG
+
+check_neg_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%001,d1
+    bgt     data                        * If register bits is greater than 1, it's invalid
+    
+    bra     neg                         * otherwise, it's a valid NEG
+    
+
+check_jsr
+    jsr     get_source_mode_bits
+    cmp.b   #%010,d1                    * Valid mode bits are 010, 101, 110, and 111 with specific register bits
+    beq     jsr
+    
+    cmp.b   #%101,d1
+    beq     jsr
+    
+    cmp.b   #%110,d1
+    beq     jsr
+    
+    cmp.b   #%111,d1
+    beq     check_jsr_source_register   * If 111, check register bits for validity
+    
+    bra     data                        * Otherwise, it's invalid
+
+check_jsr_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%011,d1
+    bgt     data                        * If register bits is over 3, it's invalid
+    
+    bra     jsr                         * Otherwise, it's a valid JSR
+    
+    
 check_lea
     jsr     get_source_mode_bits
     cmp.b   #%010,d1
@@ -468,6 +518,7 @@ check_lea_source_register
     bgt     data                        * If register bits is greater than 3, it's invalid
     
     bra     lea                         * Otherwise it's a valid LEA
+
     
 check_movem
     jsr     get_source_mode_bits
@@ -518,28 +569,6 @@ moveM_memToReg                          * This section checks addressing modes t
     beq     moveM
     
     bra     data                        * otherwise it's not MOVEM
-    
-check_neg
-    jsr     get_destination_mode_bits
-    cmp.b   #%11,d1
-    beq     data                        * If size bits is %11, it's invalid
-    
-    move.b  d1,d3                       * store the size in d3
-    jsr     get_source_mode_bits
-    cmp.b   #%001,d1
-    beq     data                        * If mode bits is 001, it's invalid
-    
-    cmp.b   #%111,d1
-    beq     check_neg_source_register   * If mode bits is 111, check for valid register bits
-    
-    bra     neg                         * Otherwise, it's a valid NEG
-
-check_neg_source_register
-    jsr     get_source_register_bits
-    cmp.b   #%001,d1
-    bgt     data                        * If register bits is greater than 1, it's invalid
-    
-    bra     neg                         * otherwise, it's a valid NEG
     
 
     
