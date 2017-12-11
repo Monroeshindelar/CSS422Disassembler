@@ -45,18 +45,24 @@ start   org     $1000
     
     jsr     read_file
     
-    simhalt
-    
+    lea     s_notif,a1
+    move.b  #14,d0
+    trap    #15    
+
     jsr     clear_all_data_registers
     lea     $0000,a0
     
+    
+    
+    
 loop
-   cmp      a2,a3
-   beq      done
-   move.w   (a2)+,d0
-   jsr 	    evaluate_operation
-   jsr      print
-   bra      loop
+    lea      $0000,a0
+    cmp.l    a2,a3
+    beq      done
+    move.w   (a2)+,d0
+    jsr 	 evaluate_operation
+    jsr      print
+    bra      loop
     
     
 *-----------------------------------------------------------
@@ -162,6 +168,13 @@ convert_helper
     bra     convert_helper
     
 print
+    move.b  #$00,(a0)
+    lea     $0000,a1
+    moveq   #13,d0
+    trap    #15
+    move.b  #16,d5
+    lea     $0000,a0
+    jsr     clear_address
     rts
 
 return_helper
@@ -178,13 +191,28 @@ clear_all_data_registers
     clr     d7
     rts
     
+clear_address
+    cmp.b   #0,d5
+    beq     return_helper
+    move.b  #$FF,(a0)+
+    subi.b  #1,d5
+    bra     clear_address
+    
 invalid
-    stop    #exit
+    lea     endinv,a1
+    move.b  #14,d0
+    trap    #15
+    bra     exit_prog
 
 done
-    stop    #exit
-	
-	
+    lea     endprog,a1
+    move.b  #14,d0
+    trap    #15
+    
+exit_prog
+    move.b  #9,d0
+    trap    #15
+
 compute_address
     lsl.w   #4,d0
     lsr.w   #4,d0
@@ -222,8 +250,9 @@ get_op_code
     rts
 
 
-evaluate_operation
+
     jsr     get_op_code                 * May put check for 0100 opcodes up here later
+
     
     cmp.w   #7,d1                       * checks if the first 4 bits is 0111 (7) which doesn't exist in our supporting list of opcodes
     beq     data
@@ -819,6 +848,7 @@ size_b
     move.b  #'.',(a0)+
     move.b  #'B',(a0)+
     move.b  #' ',(a0)+
+    move.b  #1,d7
     jsr     compute_address
     rts
     
@@ -826,6 +856,7 @@ size_w
     move.b  #'.',(a0)+
     move.b  #'W',(a0)+
     move.b  #' ',(a0)+
+    move.b  #2,d7
     jsr     compute_address
     rts
 
@@ -833,6 +864,7 @@ size_l
     move.b  #'.',(a0)+
     move.b  #'L',(a0)+
     move.b  #' ',(a0)+
+    move.b  #3,d7
     jsr     compute_address
     rts
 
@@ -890,7 +922,43 @@ address_post_decrement
     
 immediate_data
     move.b  #'#',(a0)+
-    * Get the immediate data
+    cmp.b   #1,d7
+    simhalt
+    beq     immediate_length_byte
+    cmp.b   #2,d7
+    beq     immediate_length_word
+    bne     immediate_length_long
+    rts
+  
+immediate_length_byte
+    move.w  (a2)+,d0
+    move.w  d0,d2
+    lsl.w   #5,d2
+    lsl.w   #3,d2
+    lsr.w   #3,d2
+    lsr.w   #6,d2
+    lsr.w   #3,d2
+    lea     hex_jump_table,a5
+    mulu.w  #8,d2
+    jsr     (a5,d2)
+    move.w  d0,d1
+    lsl.w   #6,d2
+    lsl.w   #6,d2
+    lsr.w   #6,d2
+    lsr.w   #6,d2
+    mulu.w  #8,d2
+    jsr     (a5,d2)
+    rts
+    
+
+immediate_length_word
+    move.w  (a2)+,d0
+    simhalt
+    rts
+    
+immediate_length_long
+    jsr     immediate_length_word
+    jsr     immediate_length_word
     rts
     
 garbage1
@@ -977,7 +1045,11 @@ snp     dc.b    '                _ _                    _                       
         dc.b    '                                         |_|        |_|   |_|              ',cr,lf
         dc.b    'Welcome to the Salt and Pepper disassembler.'                               ,cr,lf
         dc.b    'Please enter a starting address: '                                          ,0
-entend  dc.b    'Please enter an ending address: '                                           ,0 
+entend  dc.b    'Please enter an ending address: '                                           ,0
+s_notif dc.b    'Starting program deconstruction...'                                         ,cr,lf,0
+endprog dc.b    'Finished deconstruction.'                                                   ,0
+endinv  dc.b    'Something went very wrong...'                                               ,cr,lf
+        dc.b    'Exiting the program.'                                                       ,0  
 
     end    start
 
