@@ -291,45 +291,104 @@ check_move_source_register
     
 
 check_add_type
-    clr     d3
-    jsr     get_source_mode_bits
-    lsr.w   #1,d1
-    move.b  d1,d3
-    
     jsr     get_destination_mode_bits
-    ror.w   #2,d1
-    add.b   d1,d3
-    cmp.b   #1,d3                       *Performing a psuedo AND: adding the first bit of the destination mode bit with the 2 bits from the source mode bits. If the result is 1, it's ADDX, which is not supported
-    beq     data
+    move.b  d1,d3                           *Storing size in d3
     
-    rol.w   #2,d1
-    cmp.b   #%0011,d1                   *If the opcode bits (destination mode bits) are 011 or 111, then it's ADDA
-    beq     adda
+    lsl.b   #6,d3                           *Isolating size bits
+    lsr.b   #6,d3
+    lsr.b   #2,d1                           *Isolating direction bit in D1
     
-    cmp.b   #%0111,d1
-    beq     adda
+    cmp.b   #%11,d3
+    beq     check_addA_mode                 * If size bits are 11, it's ADDA
     
-    bra     add                         *Otherwise it's just ADD
+    cmp.b   #1,d1                           * If directional bit is 1 (EA Destination), check available addressing modes for that
+    beq     add_EA_destination_type
     
-
+    jsr     get_source_mode_bits            * Otherwise, it uses a data register as the destination (<ea> + Dn -> Dn), so check the available addressing for that
+    cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
+    beq     check_add_source_register
+    
+       
+    bra     add                             *Otherwise it's just ADD
+    
+add_EA_destination_type
+    jsr     get_source_mode_bits
+    cmp.b   #%001,d1
+    ble     data                            * If source mode bits are less than or equal to 1, it's invalid
+    
+    cmp.b   #%111,d1
+    beq     check_add_source_registerEA     * Checks available register bits for mode 111 in EA Destination mode
+    
+    bra     add                             * Otherwise, it's a legit ADD
+    
+check_add_source_registerEA
+    jsr     get_source_register_bits
+    cmp.b   #%01,d1
+    bgt     data                            * register bits cannot be greater than 1
+    
+    bra     add                             * otherwise it's a valid ADD
+check_add_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%100,d1
+    bgt     data                            * If register bits are greater than 4, it's invalid
+    
+    bra     add                             * Otherwise, it's a valid ADD
+    
+check_addA_mode
+    move.b  d1,d3                           * Move the size bit into d3
+    jsr     get_source_mode_bits
+    cmp.b   #%111,d1
+    beq     check_addA_source_register      * If mode bits are 111, validate the register bits
+    
+    bra     addA                           * Else, it's a legit ADDA
+check_addA_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%100,d1                        * Register bits cannot exceed 4
+    bgt     data
+        
+    bra     addA                            * else, it's a legit ADDA
+    
+    
 check_sub_type
-    clr     d3
-    jsr     get_source_mode_bits
-    lsr.w   #1,d1
-    move.b  d1,d3
-    
     jsr     get_destination_mode_bits
-    ror.w   #2,d1
-    add.b   d1,d3
-    cmp.b   #1,d3                       *Performing a psuedo AND: adding the first bit of the destination mode bit with the 2 bits from the source mode bits. If the result is 1, it's SUBX, which is not supported
-    beq     data
-
-    rol.w   #2,d1                       *If the opcode bits (destination mode bits) are 011 or 111, then it's SUBA, which is not supported
-    cmp.b   #%0011,d1
-    beq     data
+    move.b  d1,d3                           *Storing size in d3
     
-    cmp.b   #%0111,d1
-    beq     data
+    lsl.b   #6,d3                           *Isolating size bits
+    lsr.b   #6,d3
+    lsr.b   #2,d1                           *Isolating direction bit in D1
+    
+    cmp.b   #%11,d3
+    beq     data                            * If size bits are 11, it's not valid
+    
+    cmp.b   #1,d1                           * If directional bit is 1 (EA Destination), check available addressing modes for that
+    beq     sub_EA_destination_type
+    
+    jsr     get_source_mode_bits            * Otherwise, it uses a data register as the destination (Dn - <ea> -> Dn), so check the available addressing for that
+    cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
+    beq     check_sub_source_register
+  
+    bra     sub                             *Otherwise it's just SUB
+
+sub_EA_destination_type
+    jsr     get_source_mode_bits
+    cmp.b   #%001,d1
+    ble     data                            * If mode bits are less than or equal to 1, it's invalid
+    
+    cmp.b   #%111,d1
+    beq     check_sub_source_registerEA
+    
+    bra     sub
+
+check_sub_source_registerEA
+    jsr     get_source_register_bits
+    cmp.b   #%001,d1
+    bgt     data
+    
+    bra     sub
+check_sub_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%100,d1
+    bgt     data
     
     bra     sub
     
@@ -587,34 +646,25 @@ add
     move.b  #'D',(a0)+
     move.b  #'D',(a0)+
     
-    cmp.b   #%0000,d1
+    cmp.b   #%00,d3
     beq     size_b
     
-    cmp.b   #%0100,d1
-    beq     size_b
-    
-    cmp.b   #%0001,d1
+    cmp.b   #%01,d3
     beq     size_w
     
-    cmp.b   #%0101,d1
-    beq     size_w
-    
-    cmp.b   #%0010,d1
+    cmp.b   #%10,d3
     beq     size_l
     
-    cmp.b   #%0110,d1
-    beq     size_l
-    
-adda
+addA
     move.b  #'A',(a0)+
     move.b  #'D',(a0)+
     move.b  #'D',(a0)+
     move.b  #'A',(a0)+
     
-    cmp.b   #%0011,d1
+    cmp.b   #0,d3
     beq     size_w
     
-    cmp.b   #%0111,d1
+    cmp.b   #1,d3
     beq     size_l
 
 sub
