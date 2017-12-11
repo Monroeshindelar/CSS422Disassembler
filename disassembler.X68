@@ -250,9 +250,9 @@ get_op_code
     rts
 
 
-
+evaluate_operation
     jsr     get_op_code                 * May put check for 0100 opcodes up here later
-
+    move.b  d1,d7
     
     cmp.w   #7,d1                       * checks if the first 4 bits is 0111 (7) which doesn't exist in our supporting list of opcodes
     beq     data
@@ -285,6 +285,15 @@ get_op_code
     
     cmp.b   #%0101,d1                   * Check for SUBQ: Check first 4 bits then diferentiate between other opcodes with the same 4 bits
     beq     check_subq
+    
+    cmp.b   #$8,d1
+    beq     check8                      * Check if the opcode is DIVS or OR
+    
+    cmp.b   #$C,d1
+    beq     check_muls                  * Check if the opcode is MULS
+    
+    cmp.b   #0,d1
+    beq     0000_Opcodes
     
     bra     loop                        * Should we branch to data instead?
 
@@ -599,8 +608,144 @@ moveM_memToReg                          * This section checks addressing modes t
     
     bra     data                        * otherwise it's not MOVEM
     
-
     
+check_8
+    jsr     get_destination_mode_bits
+    cmp.b   #%111,d1
+    beq     check_divs                  * Check if it's a valid DIVS
+    
+    cmp.b   #%011,d1
+    bne     check_or
+    
+    bra     data                        * Otherwise, it's invalid
+    rts
+
+check_divs
+    jsr     get_source_mode_bits
+    cmp.b   #%001,d1
+    beq     data
+    
+    cmp.b   #%111,d1
+    beq     check_divs_source_register
+    
+    bra     divs
+    
+check_divs_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%100,d1
+    bgt     data
+    
+    bra     divs
+    
+    
+check_muls
+    jsr     get_destination_mode_bits
+    cmp.b   #%111,d1
+    beq     check_muls_source_mode
+    bne     data
+    rts
+    
+check_muls_source_mode
+    jsr     get_source_mode_bits
+    cmp.b   #%001,d1
+    beq     data
+    
+    cmp.b   #%111,d1
+    beq     check_muls_source_register
+    
+    bra     muls
+check_muls_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%100,d1
+    bgt     data
+    
+    bra     muls
+
+check_or
+    move.b  d1,d3
+    lsl.b   #6,d3
+    lsr.b   #6,d3                           * getting size
+    
+    lsr.b   #2,d1                           * Isolate direction bit
+    
+    cmp.b   #1,d1                           * If direction bit is 1, location is destination operand, otherwise, location is source operand
+    beq     check_or_destination_operand
+    
+    jsr     get_source_mode_bits
+    cmp.b   #%001,d1
+    beq     data
+    
+    cmp.b   #%111,d1
+    beq     check_or_source_register0
+    
+    bra     or
+    
+check_or_source_register0
+    jsr     get_source_register_bits
+    cmp.b   #%100,d1
+    bgt     data
+    
+    bra     or
+check_or_destination_operand
+    jsr     get_source_mode_bits
+    cmp.b   #%000,d1
+    beq     data
+    
+    cmp.b   #%001,d1
+    beq     data
+    
+    cmp.b   #%111,d1
+    beq     check_or_source_register1
+    
+    bra     or
+
+check_or_source_register1
+    jsr     get_source_register_bits
+    cmp.b   #%001,d1
+    bgt     data
+    
+    bra     or
+
+0000_Opcodes
+    move.w  d0,d1
+    lsr.w   #6,d1
+    
+    cmp.b   #$22,d1
+    beq     check_bclr                          * Check if valid BCLR
+    
+    lsr.w   #2,d1
+    
+    cmp.b   #0,d1
+    beq     check_ori                           * Check if valid ORI
+    
+    cmp.b   #$C,d1
+    beq     check_cmpi                          * Check if valid CMPI
+    
+    bra     data                                * Otherwise, it's DATA
+
+check_ori
+    jsr     get_destination_mode_bits
+    cmp.b   #3,d1
+    beq     data                                * cannot have %11 bits for size
+    
+    move.b  d1,d3                               * store size in d3
+    
+    jsr     get_source_mode_bits
+    cmp.b   #%001,d1
+    beq     data
+    
+    cmp.b   #%111,d1
+    beq     check_ori_source_register
+    
+    bra     ori
+
+check_ori_source_register
+    jsr     get_source_register_bits
+    cmp.b   #1,d1
+    bgt     data
+    
+    bra     ori
+ 
 *-----------------------------------------------------------
 *				    Get Destination Register					
 *-----------------------------------------------------------	
@@ -844,6 +989,79 @@ jsr
     jsr     compute_address
     rts
     
+*-----------------------------------To be fixed later--------------------------------------------    
+muls
+    move.b  #'M',(a0)+
+    move.b  #'U',(a0)+
+    move.b  #'L',(a0)+
+    move.b  #'S',(a0)+
+    move.b  #' ',(a0)+
+
+    jsr     get_source
+    jsr     cut_opcode
+    move.b  #',',(a0)+
+    jsr     get_destination_register_bits
+    move.b  d1,d3
+    moveq   #0,d1
+    lea     address_mode_jump_table,a5
+    mulu    #8,d1
+    jsr     (a5,d1)
+    rts
+divs
+    move.b  #'D',(a0)+
+    move.b  #'I',(a0)+
+    move.b  #'V',(a0)+
+    move.b  #'S',(a0)+
+    move.b  #' ',(a0)+
+
+    jsr     get_source
+    jsr     cut_opcode
+    move.b  #',',(a0)+
+    jsr     get_destination_register_bits
+    move.b  d1,d3
+    moveq   #0,d1
+    lea     address_mode_jump_table,a5
+    mulu    #8,d1
+    jsr     (a5,d1)
+    rts
+cut_opcode
+    lsl.w   #4,d0
+    lsr.w   #4,d0
+    rts
+
+compute_address
+    jsr     cut_opcode 
+    jsr     get_source
+    jsr     get_destination
+    rts
+*------------------------------------------------------------------------------------------------
+
+or
+    move.b  #'O',(a0)+
+    move.b  #'R',(a0)+
+    
+    cmp.b   #0,d3
+    beq     size_b
+    
+    cmp.b   #1,d3
+    beq     size_w
+    
+    bra     size_l
+    
+ori
+    move.b  #'O',(a0)+
+    move.b  #'R',(a0)+
+    move.b  #'I',(a0)+
+    
+    cmp.b   #0,d3
+    beq     size_b
+    
+    cmp.b   #1,d3
+    beq     size_w
+    
+    bra     size_l
+    
+    
 size_b
     move.b  #'.',(a0)+
     move.b  #'B',(a0)+
@@ -1052,6 +1270,7 @@ endinv  dc.b    'Something went very wrong...'                                  
         dc.b    'Exiting the program.'                                                       ,0  
 
     end    start
+
 
 
 
