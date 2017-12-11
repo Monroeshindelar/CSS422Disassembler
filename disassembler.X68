@@ -298,6 +298,9 @@ evaluate_operation
     cmp.b   #$B,d1
     beq     1011_Opcodes                * Check if EOR or CMP
     
+    cmp.b   #$E,d1
+    beq     1110_Opcodes                * Check for ASd, LSd, or ROd
+    
     bra     loop                        * Should we branch to data instead?
 
 check_move_type
@@ -846,6 +849,113 @@ check_cmp_source_register
     
     bra     cmp
 
+1110_Opcodes
+    jsr     get_destination_mode_bits
+    lsl.b   #6,d1
+    lsr.b   #6,d1
+    
+    cmp.b   #%11,d1                         * If size bit is 11, it's a memory shift type
+    beq     check_memory_shift_type
+    
+    move.b  d1,d3                           * Else, it's register shift type. Store size in d3
+    jsr     get_source_mode_bits
+    cmp.b   #%00,d1
+    beq     check_asd_register_shift
+    
+    cmp.b   #%01,d1
+    beq     check_lsd_register_shift
+    
+    cmp.b   #%11,d1
+    beq     check_rod_register_shift
+    
+    bra     data
+    
+check_asd_register_shift
+    jsr     get_destination_mode_bits
+    lsr.b   #2,d1
+    
+    bra     asd
+    
+check_lsd_register_shift
+    jsr     get_destination_mode_bits
+    lsr.b   #2,d1
+    
+    bra     lsd
+    
+check_rod_register_shift
+    jsr     get_destination_mode_bits
+    lsr.b   #2,d1
+    
+    bra     rod
+    
+check_memory_shift_type
+    move.b  d1,d3
+    jsr     get_destination_register_bits
+    cmp.b   #%000,d1
+    beq     check_asd_memory_shift
+    
+    cmp.b   #%001,d1
+    beq     check_lsd_memory_shift
+    
+    cmp.b   #%011,d1
+    beq     check_rod_memory_shift
+    
+    bra     data
+    
+check_asd_memory_shift
+    jsr     check_memory_shift_mode
+    
+    cmp.b   #%111,d1
+    beq     check_asd_memory_shift_register
+    
+    bra     asd
+    
+check_lsd_memory_shift
+    jsr     check_memory_shift_mode
+    
+    cmp.b   #%111,d1
+    beq     check_lsd_memory_shift_register
+    
+    bra     lsd
+check_rod_memory_shift
+    jsr     check_memory_shift_mode
+    
+    cmp.b   #%111,d1
+    beq     check_rod_memory_shift_register
+    
+    bra     rod
+
+check_memory_shift_mode                                 * checks for valid mode bits
+    jsr     get_source_mode_bits
+    cmp.b   #%000,d1
+    beq     data
+    
+    cmp.b   #%001,d1
+    beq     data
+    
+    rts     
+
+check_asd_memory_shift_register                        *checks asd memory shift type source register when mode is 111
+    jsr     get_source_register_bits
+    cmp.b   #1,d1
+    bgt     data
+    
+    bra     asd
+    
+check_lsd_memory_shift_register                        *checks lsd memory shift type source register when mode is 111
+    jsr     get_source_register_bits
+    cmp.b   #1,d1
+    bgt     data
+    
+    bra     lsd
+    
+check_rod_memory_shift_register                        *checks rod memory shift type source register when mode is 111
+    jsr     get_source_register_bits
+    cmp.b   #1,d1
+    bgt     data
+    
+    bra     rod
+
 
     
  
@@ -1216,6 +1326,53 @@ cmp
     
     bra     size_l
     
+    
+asd
+    move.b  #'A',(a0)+
+    move.b  #'S',(a0)+
+    
+    jsr     check_direction
+    bra     check_shift_size
+
+lsd
+    move.b  #'L',(a0)+
+    move.b  #'S',(a0)+
+    
+    jsr     check_direction
+    bra     check_shift_size
+
+rod
+    move.b  #'R',(a0)+
+    move.b  #'O',(a0)+
+    
+    jsr     check_direction
+    bra     check_shift_size
+
+check_shift_size
+    cmp.b   #%11,d1
+    beq     size_w
+    
+    cmp.b   #%00,d1
+    beq     size_b
+    
+    cmp.b   #%01,d1
+    beq     size_w
+    
+    bra     size_l
+
+check_direction
+    cmp.b   #0,d1
+    beq     right
+    
+    bra     left
+
+right
+    move.b  #'R',(a0)+
+    rts
+left
+    move.b  #'L',(a0)+
+    rts
+    
 size_b
     move.b  #'.',(a0)+
     move.b  #'B',(a0)+
@@ -1245,6 +1402,7 @@ return_to_sub
     move.b  #'T',(a0)+
     move.b  #'S',(a0)+
     move.b  #' ',(a0)+
+    rts
 
 *-----------------------------------------------------------
 *                     Addressing Modes				 				
