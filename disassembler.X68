@@ -807,6 +807,14 @@ neg
     
     bra     size_l
     
+jsr
+    move.b  #'J',(a0)+
+    move.b  #'S',(a0)+
+    move.b  #'R',(a0)+
+    move.b  #' ',(a0)+
+    jsr     compute_address
+    rts
+    
 size_b
     move.b  #'.',(a0)+
     move.b  #'B',(a0)+
