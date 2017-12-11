@@ -261,11 +261,35 @@ evaluate_operation
 
 check_move_type
     move.b  d1,d3                       * store size of move
-    jsr     get_destination_mode_bits
-    cmp     #1,d1                       * if destination bits is 001, go to moveA. Otherwise, go to move.
-    beq     moveA
-    bra     move                        * are we jumping back here or no?
+    jsr     get_source_mode_bits
+    cmp     #%111,d1                    * If source mode bits are 111
+    beq     check_move_source_register  
     
+continue_move_check
+    jsr     get_destination_mode_bits
+    cmp.b   #%001,d1
+    beq     moveA                       * If destination mode bits are 001, it's MOVEA
+    
+    cmp.b   #%111,d1
+    beq     check_move_destination_register     * If destination mode is 111, check the register for validity
+    
+    bra     move                        *Otherwise, it's a valid MOVE
+
+check_move_destination_register
+    jsr     get_destination_register_bits
+    cmp.b   #1,d1
+    bgt     data                          * If register bit is greater than 1, it's DATA
+    
+    bra     move                          * Otherwise, it's a valid MOVE
+    
+check_move_source_register
+    jsr     get_source_register_bits
+    cmp.b   #%100,d1
+    bgt     data                            *If register bits are greater than %100, its invalid
+    
+    bra    continue_move_check
+    
+
 check_add_type
     clr     d3
     jsr     get_source_mode_bits
@@ -342,22 +366,22 @@ check_subq
     
 check_movem
     jsr     get_source_mode_bits
-    cmp.b   #%010,d1
-    beq     moveM
-    
-    cmp.b   #%101,d1
-    beq     moveM
-    
-    cmp.b   #%110,d1
-    beq     moveM
-    
-    cmp.b   #%111,d1
-    beq     check_moveM_reg
-    
     move.b  d1,d3
+    cmp.b   #%010,d3
+    beq     moveM
+    
+    cmp.b   #%101,d3
+    beq     moveM
+    
+    cmp.b   #%110,d3
+    beq     moveM
+    
     jsr     get_destination_register_bits
     lsl.b   #6,d1
     lsr.b   #7,d1                       * Isolate the directional bit
+    
+    cmp.b   #%111,d3
+    beq     check_moveM_reg
     
     cmp.b   #1,d1
     beq     moveM_memToReg
@@ -368,34 +392,24 @@ check_movem
     
     bra     data                        * Otherwise, it's not MOVEM
 
-check_moveM_reg
-    jsr     get_source_register_bits
-    cmp.b   #%000,d1
-    beq     moveM
-    
-    cmp.b   #%001,d1
-    beq     moveM
-    
-    move.b  d1,d3
-    jsr     get_destination_register_bits
-    lsl.b   #6,d1
-    lsr.b   #7,d1                       * Isolate the directional bit
-    
-    cmp.b   #1,d1
+check_moveM_reg                         *This section checks the direction if it's memory to register. If not, it checks for valid register to memory 111 address modes
+    cmp.b   #1,d1                       *d1 holds the destination register bit
     beq     moveM_memToReg111
     
-    bra     data                        * Otherwise, it's not MOVEM
+    jsr     get_source_register_bits
+    cmp.b   #1,d1                       *If register bits are greater than 1, it's DATA
+    bgt     data
+    
+    bra     moveM                       * Otherwise, it's a legit MOVEM
     
 moveM_memToReg111                       * This section checks the available 111 addressing modes in memory to register mode
-    cmp.b   #%010,d3
-    beq     moveM
+    jsr     get_source_register_bits
+    cmp.b   #3,d1
+    bgt     data                        * If register bits are greater than 3 it's DATA
     
-    cmp.b   #%011,d3
-    beq     moveM
-    
-    bra     data                        * Otherwise, it's not MOVEM
+    bra     moveM                        * Otherwise, it's a legit MOVEM
 
-moveM_memToReg                          * This section checks addressing modes that are available in memory to register mode
+moveM_memToReg                          * This section checks addressing modes that are available in memory to register mode (excluding 111 mode)
     cmp.b   #%011,d3
     beq     moveM
     
@@ -538,7 +552,7 @@ move
      
 moveA
     cmp.b   #%0001,d3
-    beq     invalid             *MOVEA cannot have byte addressing
+    beq     data             *MOVEA cannot have byte addressing
     move.b  #'M',(a0)+
     move.b  #'O',(a0)+
     move.b  #'V',(a0)+
