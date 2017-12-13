@@ -278,10 +278,10 @@ check_move_type
     move.b  d1,d3                       * store size of move
     jsr     get_source_mode_bits
     
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     
@@ -343,10 +343,10 @@ check_add_type
     beq     add_EA_destination_type
     
     jsr     get_source_mode_bits           * Otherwise, it uses a data register as the destination (<ea> + Dn -> Dn), so check the available addressing for that
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
@@ -357,10 +357,10 @@ check_add_type
     
 add_EA_destination_type
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     cmp.b   #%001,d1
@@ -396,10 +396,10 @@ check_add_source_register
 check_addA_mode
     move.b  d1,d3                           * Move the size bit into d3
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
     
     cmp.b   #%111,d1
@@ -436,10 +436,10 @@ check_sub_type
     
     jsr     get_source_mode_bits  * Otherwise, it uses a data register as the destination (Dn - <ea> -> Dn), so check the available addressing for that
 
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
     
     cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
@@ -449,10 +449,10 @@ check_sub_type
 
 sub_EA_destination_type
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     cmp.b   #%001,d1
@@ -496,10 +496,10 @@ check_subq
     beq     data
     
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
  
     cmp.b   #%111,d1                    * Now checking if the source mode bits is 111
@@ -552,10 +552,10 @@ check_neg
     
     move.b  d1,d3                       * store the size in d3
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     cmp.b   #%001,d1
@@ -658,10 +658,10 @@ check_8
 
 check_divs
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     cmp.b   #%001,d1
@@ -695,10 +695,10 @@ check_muls
     
 check_muls_source_mode
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     cmp.b   #%001,d1
@@ -733,10 +733,10 @@ check_or
     beq     check_or_destination_operand
     
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     cmp.b   #%001,d1
@@ -762,10 +762,10 @@ check_or_source_register0
     
 check_or_destination_operand
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     cmp.b   #%001,d1
@@ -830,10 +830,10 @@ check_ori_source_register
     
 check_bclr                                      * checks for valid source modes in BCLR static
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     cmp.b   #%001,d1                            * cannot use direct address mode
@@ -859,10 +859,10 @@ check_cmpi
     move.b  d1,d3
     
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     cmp.b   #%001,d1
@@ -896,10 +896,10 @@ check_eor
     move.b  d1,d3
     
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     cmp.b   #%001,d1
@@ -926,10 +926,10 @@ check_cmp
     move.b  d1,d3
     
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     cmp.b   #%111,d1
@@ -1038,10 +1038,10 @@ check_rod_memory_shift
 
 check_memory_shift_mode                                 * checks for valid mode bits
     jsr     get_source_mode_bits
-    cmp.b   #4,d1
+    cmp.b   #5,d1
     beq     data
     
-    cmp.b   #5,d1
+    cmp.b   #6,d1
     beq     data
 
     cmp.b   #%001,d1
