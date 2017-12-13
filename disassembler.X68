@@ -21,6 +21,7 @@ start   org     $1000
 *-----------------------------------------------------------
 *				           User Input				
 *-----------------------------------------------------------
+
     move.b  #2,d0
     trap    #15
     clr     d0
@@ -271,17 +272,23 @@ check_move_type
     move.b  d1,d3                       * store size of move
     jsr     get_source_mode_bits
     
-    jsr     check_source_mode_displacement      * check if source mode bits are displacement bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     
     cmp.b   #%111,d1                    * If source mode bits are 111
-    beq     check_move_source_register  
+    beq     check_move_source_register 
+    
     
 continue_move_check
     jsr     get_destination_mode_bits
-    
     cmp.b   #%001,d1
     beq     moveA                       * If destination mode bits are 001, it's MOVEA
     
+
     cmp.b   #%101,d1
     beq     data
     
@@ -301,7 +308,12 @@ check_move_destination_register
     bra     move                          * Otherwise, it's a valid MOVE
     
 check_move_source_register
-    jsr    check_source_register_displacement
+    jsr     get_source_register_bits
+    cmp.b   #%010,d1
+    beq     data
+    
+    cmp.b   #%011,d1
+    beq     data
     cmp.b   #4,d1
     bgt     data
     
@@ -322,7 +334,13 @@ check_add_type
     cmp.b   #1,d1                           * If directional bit is 1 (EA Destination), check available addressing modes for that
     beq     add_EA_destination_type
     
-    jsr     check_source_mode_displacement  * Otherwise, it uses a data register as the destination (<ea> + Dn -> Dn), so check the available addressing for that
+    jsr     get_source_mode_bits           * Otherwise, it uses a data register as the destination (<ea> + Dn -> Dn), so check the available addressing for that
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
     beq     check_add_source_register
     
@@ -330,7 +348,13 @@ check_add_type
     bra     add                             *Otherwise it's just ADD
     
 add_EA_destination_type
-    jsr     check_source_mode_displacement
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     cmp.b   #%001,d1
     ble     data                            * If source mode bits are less than or equal to 1, it's invalid
     
@@ -347,7 +371,14 @@ check_add_source_registerEA
     bra     add                             * otherwise it's a valid ADD
     
 check_add_source_register
-    jsr     check_source_register_displacement   *checks for displacement bits
+    jsr     get_source_register_bits
+    cmp.b   #%010,d1
+    beq     data
+    
+    cmp.b   #%011,d1
+    beq     data
+
+
     
     cmp.b   #4,d1                           *If register bits is greater than 4, it's DATA
     bgt     data
@@ -357,7 +388,12 @@ check_add_source_register
     
 check_addA_mode
     move.b  d1,d3                           * Move the size bit into d3
-    jsr     check_source_mode_displacement  * check for source mode displacement
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
     
     cmp.b   #%111,d1
     beq     check_addA_source_register      * If mode bits are 111, validate the register bits
@@ -365,7 +401,13 @@ check_addA_mode
     bra     addA                            * Else, it's a legit ADDA
     
 check_addA_source_register
-    jsr     check_source_register_displacement
+    jsr     get_source_register_bits
+    cmp.b   #%010,d1
+    beq     data
+    
+    cmp.b   #%011,d1
+    beq     data
+
     cmp.b   #4,d1
     bgt     data
     
@@ -385,14 +427,27 @@ check_sub_type
     cmp.b   #1,d1                           * If directional bit is 1 (EA Destination), check available addressing modes for that
     beq     sub_EA_destination_type
     
-    jsr     check_source_mode_displacement  * Otherwise, it uses a data register as the destination (Dn - <ea> -> Dn), so check the available addressing for that
+    jsr     get_source_mode_bits  * Otherwise, it uses a data register as the destination (Dn - <ea> -> Dn), so check the available addressing for that
+
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+    
     cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
     beq     check_sub_source_register
   
     bra     sub                             *Otherwise it's just SUB
 
 sub_EA_destination_type
-    jsr     check_source_mode_displacement
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     cmp.b   #%001,d1
     ble     data                            * If mode bits are less than or equal to 1, it's invalid
     
@@ -409,7 +464,13 @@ check_sub_source_registerEA
     bra     sub
     
 check_sub_source_register
-    jsr     check_source_register_displacement
+    jsr     get_source_register_bits
+    cmp.b   #%010,d1
+    beq     data
+    
+    cmp.b   #%011,d1
+    beq     data
+
     cmp.b   #%100,d1
     bgt     data
     
@@ -427,7 +488,13 @@ check_subq
     cmp.b   #0,d1                       * If bit was 0, it's ADDQ which is not supported
     beq     data
     
-    jsr     check_source_mode_displacement 
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+ 
     cmp.b   #%111,d1                    * Now checking if the source mode bits is 111
     beq     check_subq_source_register  * check for valid registers
     
@@ -477,7 +544,13 @@ check_neg
     beq     data                        * If size bits is %11, it's invalid
     
     move.b  d1,d3                       * store the size in d3
-    jsr     check_source_mode_displacement
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     cmp.b   #%001,d1
     beq     data                        * If mode bits is 001, it's invalid
     
@@ -577,7 +650,13 @@ check_8
     rts
 
 check_divs
-    jsr     check_source_mode_displacement
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     cmp.b   #%001,d1
     beq     data
     
@@ -587,7 +666,13 @@ check_divs
     bra     divs
     
 check_divs_source_register
-    jsr     check_source_register_displacement
+    jsr     get_source_register_bits
+    cmp.b   #%010,d1
+    beq     data
+    
+    cmp.b   #%011,d1
+    beq     data
+
     cmp.b   #%100,d1
     bgt     data
     
@@ -602,7 +687,13 @@ check_muls
     rts
     
 check_muls_source_mode
-    jsr     check_source_mode_displacement
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     cmp.b   #%001,d1
     beq     data
     
@@ -612,7 +703,13 @@ check_muls_source_mode
     bra     muls
     
 check_muls_source_register
-    jsr     check_source_register_displacement
+    jsr     get_source_register_bits
+    cmp.b   #%010,d1
+    beq     data
+    
+    cmp.b   #%011,d1
+    beq     data
+
     cmp.b   #%100,d1
     bgt     data
     
@@ -628,7 +725,13 @@ check_or
     cmp.b   #1,d1                           * If direction bit is 1, location is destination operand, otherwise, location is source operand
     beq     check_or_destination_operand
     
-    jsr     check_source_mode_displacement
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     cmp.b   #%001,d1
     beq     data
     
@@ -638,14 +741,26 @@ check_or
     bra     or
     
 check_or_source_register0
-    jsr     check_source_register_displacement
+    jsr     get_source_register_bits
+    cmp.b   #%010,d1
+    beq     data
+    
+    cmp.b   #%011,d1
+    beq     data
+
     cmp.b   #%100,d1
     bgt     data
     
     bra     or
     
 check_or_destination_operand
-    jsr     check_source_mode_displacement
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     cmp.b   #%001,d1
     ble     data
     
@@ -707,7 +822,13 @@ check_ori_source_register
     bra     ori
     
 check_bclr                                      * checks for valid source modes in BCLR static
-    jsr     check_source_mode_displacement      * Grab source mode bits and check for displacement modes
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     cmp.b   #%001,d1                            * cannot use direct address mode
     beq     data
     
@@ -730,7 +851,13 @@ check_cmpi
     
     move.b  d1,d3
     
-    jsr     check_source_mode_displacement
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     cmp.b   #%001,d1
     beq     data
     
@@ -761,7 +888,13 @@ check_eor
     
     move.b  d1,d3
     
-    jsr     check_source_mode_displacement
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     cmp.b   #%001,d1
     beq     data
     
@@ -784,7 +917,13 @@ check_cmp
     
     move.b  d1,d3
     
-    jsr     check_source_mode_displacement
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     cmp.b   #%111,d1
     beq     check_cmp_source_register
     
@@ -802,7 +941,13 @@ check_legit_cmp_size
     bra     continue_cmp
     
 check_cmp_source_register
-    jsr     check_source_register_displacement
+    jsr     get_source_register_bits
+    cmp.b   #%010,d1
+    beq     data
+    
+    cmp.b   #%011,d1
+    beq     data
+
     cmp.b   #%100,d1
     bgt     data
     
@@ -885,7 +1030,13 @@ check_rod_memory_shift
     bra     rod
 
 check_memory_shift_mode                                 * checks for valid mode bits
-    jsr     check_source_mode_displacement
+    jsr     get_source_mode_bits
+    cmp.b   #5,d1
+    beq     data
+    
+    cmp.b   #6,d1
+    beq     data
+
     cmp.b   #%001,d1
     ble     data
     
@@ -988,35 +1139,6 @@ check_bvc
     beq     bvc
     
     bra     data
-
-check_destination_mode_displacement                                    * checks for displacement mode (which we don't support)
-    jsr     get_destination_mode_bits
-    cmp.b   #4,d1
-    beq     data
-    
-    cmp.b   #5,d1
-    beq     data
-    rts
-    
-check_source_mode_displacement
-    jsr     get_source_mode_bits
-    cmp.b   #4,d1
-    beq     data
-    
-    cmp.b   #5,d1
-    beq     data
-    rts   
-    
-check_source_register_displacement                                      * checks for displacment mode in the source register. Only call when source mode is 111
-    jsr     get_source_register_bits
-    cmp.b   #%010,d1
-    beq     data
-    
-    cmp.b   #%011,d1
-    beq     data
-    
-    rts
-
     
 *-----------------------------------------------------------
 *                        OP Codes 			 				
@@ -1928,6 +2050,7 @@ endinv  dc.b    'Something went very wrong...'                                  
         dc.b    'Exiting the program.'                                                       ,0  
 
     end    start
+
 
 
 
