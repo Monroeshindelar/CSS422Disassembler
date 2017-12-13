@@ -44,7 +44,7 @@ start   org     $1000
     jsr     get_address
     movea.l d2,a3
     
-    *jsr     read_file
+    jsr     read_file
     
     lea     s_notif,a1
     move.b  #14,d0
@@ -1134,10 +1134,22 @@ lea
     move.b  #'E',(a0)+
     move.b  #'A',(a0)+
     move.b  #' ',(a0)+
-    moveq   #1,d1
-    move.b  #3,d6
+
+    jsr     get_source_mode_bits
+    cmp.b   #%010,d1
+    beq     ea_5_7_11_16
+    jsr     size_helper
     jsr     ea_5_7_11_16
     rts
+
+data_size_word
+    move.b  #2,d6
+    rts
+
+data_size_long
+    move.b  #3,d6
+    rts
+
     
 neg
     move.b  #'N',(a0)+
@@ -1160,10 +1172,32 @@ jsr
     move.b  #'S',(a0)+
     move.b  #'R',(a0)+
     move.b  #' ',(a0)+
-    
-    move.b  #1,d4
-    
+
+    cmp.b   #%010,d1
+    beq     get_source
+    jsr     size_helper    
+    move.b  #8,d4
+    lea     compute_address_jump_table,a5
+    jsr     (a5,d4)
     rts
+
+size_helper
+    jsr     get_source_register_bits
+    cmp.b   #%000,d1
+    beq     data_size_word
+    cmp.b   #%001,d1
+    beq     data_size_long
+    rts
+
+
+get_immediate_data_size
+    jsr     get_source_register_bits
+    cmp.b   #%000,d1
+    beq     data_size_word
+    cmp     #%001,d1
+    beq     data_size_long
+    rts
+
     
 muls
     move.b  #'M',(a0)+
@@ -1221,12 +1255,25 @@ bclr
     move.b  #'C',(a0)+
     move.b  #'L',(a0)+
     move.b  #'R',(a0)+
+
+    jsr     get_destination_mode_bits
+    lsl.b   #2,d1
+    lsr.b   #2,d1
+
+    cmp.b   #%1,d1
+    beq     bclr_dynamic
+    bne     bclr_static
     
-    jsr     get_source_mode_bits
-    cmp.b   #%000,d1
-    beq     size_l
-    
-    bra     size_b
+    rts
+
+
+bclr_static
+
+    rts
+
+bclr_dynamic
+
+    rts
     
 cmpi
     move.b  #'C',(a0)+
@@ -1509,6 +1556,8 @@ compute_address_jump_table
     rts
     jsr     compute_address_5
     rts
+    jsr     compute_address_6
+    rts
     
 *-----------------------------------------------------------
 *                   Address Mode Jump Table				 			       
@@ -1627,6 +1676,15 @@ compute_address_5
     move.b  d1,d3
     move.b  #0,d1
     lea     address_mode_jump_table,a5
+    jsr     (a5,d1)
+    rts
+
+compute_address_6
+    jsr     cut_opcode
+    jsr     get_destination_register_bits
+    move.b  d1,d3
+    lea     address_mode_jump_table,a5
+    move.b #0,d1
     jsr     (a5,d1)
     rts
 *-----------------------------------------------------------
@@ -1833,6 +1891,8 @@ endinv  dc.b    'Something went very wrong...'                                  
         dc.b    'Exiting the program.'                                                       ,0  
 
     end    start
+
+
 
 
 
