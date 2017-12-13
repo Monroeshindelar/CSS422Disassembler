@@ -308,7 +308,7 @@ check_move_destination_register
     bra     move                          * Otherwise, it's a valid MOVE
     
 check_move_source_register
-    jsr    check_source_register_displacement
+    jsr    check_source_reg_displacement
     
     cmp.b   #4,d1
     bgt     data
@@ -355,7 +355,7 @@ check_add_source_registerEA
     bra     add                             * otherwise it's a valid ADD
     
 check_add_source_register
-    jsr     check_source_register_displacement   *checks for displacement bits
+    jsr     check_source_reg_displacement   *checks for displacement bits
     
     cmp.b   #4,d1                           *If register bits is greater than 4, it's DATA
     bgt     data
@@ -373,7 +373,7 @@ check_addA_mode
     bra     addA                            * Else, it's a legit ADDA
     
 check_addA_source_register
-    jsr     check_source_register_displacement
+    jsr     check_source_reg_displacement
     cmp.b   #4,d1
     bgt     data
     
@@ -417,7 +417,7 @@ check_sub_source_registerEA
     bra     sub
     
 check_sub_source_register
-    jsr     check_source_register_displacement
+    jsr     check_source_reg_displacement
     cmp.b   #%100,d1
     bgt     data
     
@@ -595,7 +595,7 @@ check_divs
     bra     divs
     
 check_divs_source_register
-    jsr     check_source_register_displacement
+    jsr     check_source_reg_displacement
     cmp.b   #%100,d1
     bgt     data
     
@@ -620,7 +620,7 @@ check_muls_source_mode
     bra     muls
     
 check_muls_source_register
-    jsr     check_source_register_displacement
+    jsr     check_source_reg_displacement
     cmp.b   #%100,d1
     bgt     data
     
@@ -646,7 +646,7 @@ check_or
     bra     or
     
 check_or_source_register0
-    jsr     check_source_register_displacement
+    jsr     check_source_reg_displacement
     cmp.b   #%100,d1
     bgt     data
     
@@ -810,7 +810,7 @@ check_legit_cmp_size
     bra     continue_cmp
     
 check_cmp_source_register
-    jsr     check_source_register_displacement
+    jsr     check_source_reg_displacement
     cmp.b   #%100,d1
     bgt     data
     
@@ -997,15 +997,6 @@ check_bvc
     
     bra     data
 
-check_destination_mode_displacement                                    * checks for displacement mode (which we don't support)
-    jsr     get_destination_mode_bits
-    cmp.b   #4,d1
-    beq     data
-    
-    cmp.b   #5,d1
-    beq     data
-    rts
-    
 check_source_mode_displacement
     jsr     get_source_mode_bits
     cmp.b   #4,d1
@@ -1015,7 +1006,7 @@ check_source_mode_displacement
     beq     data
     rts   
     
-check_source_register_displacement                              * checks for displacment mode in the source register. Only call when source mode is 111
+check_source_reg_displacement                              * checks for displacment mode in the source register. Only call when source mode is 111
     jsr     get_source_register_bits
     cmp.b   #%010,d1
     beq     data
@@ -1907,6 +1898,7 @@ endinv  dc.b    'Something went very wrong...'                                  
         dc.b    'Exiting the program.'                                                       ,0  
 
     end    start
+
 
 
 
