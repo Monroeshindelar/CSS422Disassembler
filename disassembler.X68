@@ -21,7 +21,6 @@ start   org     $1000
 *-----------------------------------------------------------
 *				           User Input				
 *-----------------------------------------------------------
-    *lea     $1000200,a1
     move.b  #2,d0
     trap    #15
     clr     d0
@@ -44,7 +43,7 @@ start   org     $1000
     jsr     get_address
     movea.l d2,a3
     
-    jsr     read_file
+    *jsr     read_file
     
     lea     s_notif,a1
     move.b  #14,d0
@@ -58,10 +57,9 @@ loop
     cmp.l    a2,a3
     ble      done
     move.w   (a2)+,d0
-    jsr 	     evaluate_operation
+    jsr 	 evaluate_operation
     jsr      print
     bra      loop
-    
     
 *-----------------------------------------------------------
 *				     Integrity Checks					
@@ -210,12 +208,7 @@ done
 exit_prog
     move.b  #9,d0
     trap    #15
-    
-get_op_code
-    move.w  d0,d1
-    lsr     #8,d1
-    lsr     #4,d1
-    rts
+
 
 
 evaluate_operation
@@ -283,11 +276,12 @@ check_move_type
     cmp.b   #%111,d1                    * If source mode bits are 111
     beq     check_move_source_register  
     
+continue_move_check
+    jsr     get_destination_mode_bits
+    
     cmp.b   #%001,d1
     beq     moveA                       * If destination mode bits are 001, it's MOVEA
     
-continue_move_check
-    jsr     get_destination_mode_bits
     cmp.b   #%101,d1
     beq     data
     
@@ -304,12 +298,10 @@ check_move_destination_register
     cmp.b   #%001,d1
     bgt     data
     
-    
     bra     move                          * Otherwise, it's a valid MOVE
     
 check_move_source_register
-    jsr    check_source_reg_displacement
-    
+    jsr    check_source_register_displacement
     cmp.b   #4,d1
     bgt     data
     
@@ -355,7 +347,7 @@ check_add_source_registerEA
     bra     add                             * otherwise it's a valid ADD
     
 check_add_source_register
-    jsr     check_source_reg_displacement   *checks for displacement bits
+    jsr     check_source_register_displacement   *checks for displacement bits
     
     cmp.b   #4,d1                           *If register bits is greater than 4, it's DATA
     bgt     data
@@ -373,7 +365,7 @@ check_addA_mode
     bra     addA                            * Else, it's a legit ADDA
     
 check_addA_source_register
-    jsr     check_source_reg_displacement
+    jsr     check_source_register_displacement
     cmp.b   #4,d1
     bgt     data
     
@@ -417,7 +409,7 @@ check_sub_source_registerEA
     bra     sub
     
 check_sub_source_register
-    jsr     check_source_reg_displacement
+    jsr     check_source_register_displacement
     cmp.b   #%100,d1
     bgt     data
     
@@ -595,7 +587,7 @@ check_divs
     bra     divs
     
 check_divs_source_register
-    jsr     check_source_reg_displacement
+    jsr     check_source_register_displacement
     cmp.b   #%100,d1
     bgt     data
     
@@ -620,7 +612,7 @@ check_muls_source_mode
     bra     muls
     
 check_muls_source_register
-    jsr     check_source_reg_displacement
+    jsr     check_source_register_displacement
     cmp.b   #%100,d1
     bgt     data
     
@@ -646,7 +638,7 @@ check_or
     bra     or
     
 check_or_source_register0
-    jsr     check_source_reg_displacement
+    jsr     check_source_register_displacement
     cmp.b   #%100,d1
     bgt     data
     
@@ -773,7 +765,6 @@ check_eor
     cmp.b   #%001,d1
     beq     data
     
-    
     cmp.b   #%111,d1
     beq     check_eor_source_register
     
@@ -799,6 +790,7 @@ check_cmp
     
     cmp.b   #%001,d1
     beq     check_legit_cmp_size
+    
 continue_cmp
     
     bra     cmp
@@ -810,7 +802,7 @@ check_legit_cmp_size
     bra     continue_cmp
     
 check_cmp_source_register
-    jsr     check_source_reg_displacement
+    jsr     check_source_register_displacement
     cmp.b   #%100,d1
     bgt     data
     
@@ -997,6 +989,15 @@ check_bvc
     
     bra     data
 
+check_destination_mode_displacement                                    * checks for displacement mode (which we don't support)
+    jsr     get_destination_mode_bits
+    cmp.b   #4,d1
+    beq     data
+    
+    cmp.b   #5,d1
+    beq     data
+    rts
+    
 check_source_mode_displacement
     jsr     get_source_mode_bits
     cmp.b   #4,d1
@@ -1006,7 +1007,7 @@ check_source_mode_displacement
     beq     data
     rts   
     
-check_source_reg_displacement                              * checks for displacment mode in the source register. Only call when source mode is 111
+check_source_register_displacement                                      * checks for displacment mode in the source register. Only call when source mode is 111
     jsr     get_source_register_bits
     cmp.b   #%010,d1
     beq     data
@@ -1058,6 +1059,7 @@ moveA
     move.b  #'E',(a0)+
     move.b  #'A',(a0)+
     
+    move.b  #7,d4
     cmp.b   #%0011,d3
     beq     size_w
     
@@ -1086,7 +1088,7 @@ add
     move.b  #'D',(a0)+
     move.b  #'D',(a0)+
     
-    move.b  #2,d4
+    move.b  #6,d4
     
     cmp.b   #%00,d3
     beq     size_b
@@ -1102,6 +1104,8 @@ addA
     move.b  #'D',(a0)+
     move.b  #'A',(a0)+
     
+    move.b  #7,d4
+    
     cmp.b   #0,d3
     beq     size_w
     
@@ -1112,7 +1116,7 @@ sub
     move.b  #'U',(a0)+
     move.b  #'B',(a0)+
     
-    move.b  #2,d0
+    move.b  #6,d0
     
     cmp.b   #%00,d3
     beq     size_b
@@ -1128,6 +1132,8 @@ subq
     move.b  #'B',(a0)+
     move.b  #'Q',(a0)+
     
+    move.b  #4,d4
+    
     cmp.b   #%00,d3        
     beq     size_b
     
@@ -1141,22 +1147,12 @@ lea
     move.b  #'E',(a0)+
     move.b  #'A',(a0)+
     move.b  #' ',(a0)+
-
-    jsr     get_source_mode_bits
-    cmp.b   #%010,d1
-    beq     ea_5_7_11_16
-    jsr     size_helper
-    jsr     ea_5_7_11_16
+    
+    move.b  #7,d4
+    lea     compute_address_jump_table,a5
+    mulu    #8,d4
+    jsr     (a5,d4)
     rts
-
-data_size_word
-    move.b  #2,d6
-    rts
-
-data_size_long
-    move.b  #3,d6
-    rts
-
     
 neg
     move.b  #'N',(a0)+
@@ -1179,32 +1175,14 @@ jsr
     move.b  #'S',(a0)+
     move.b  #'R',(a0)+
     move.b  #' ',(a0)+
-
-    cmp.b   #%010,d1
-    beq     get_source
-    jsr     size_helper    
-    move.b  #8,d4
-    lea     compute_address_jump_table,a5
-    jsr     (a5,d4)
-    rts
-
-size_helper
+    
     jsr     get_source_register_bits
-    cmp.b   #%000,d1
-    beq     data_size_word
-    cmp.b   #%001,d1
-    beq     data_size_long
+    move.b  d1,d3
+    jsr     get_source_mode_bits
+    mulu    #8,d1
+    lea     address_mode_jump_table,a5
+    jsr     (a5,d1)
     rts
-
-
-get_immediate_data_size
-    jsr     get_source_register_bits
-    cmp.b   #%000,d1
-    beq     data_size_word
-    cmp     #%001,d1
-    beq     data_size_long
-    rts
-
     
 muls
     move.b  #'M',(a0)+
@@ -1212,9 +1190,10 @@ muls
     move.b  #'L',(a0)+
     move.b  #'S',(a0)+
     move.b  #' ',(a0)+
-    
-    moveq   #0,d1
-    jsr     ea_5_7_11_16
+    move.b  #5,d4
+    lea     compute_address_jump_table,a5
+    mulu    #8,d4
+    jsr     (a5,d4)
     rts
     
 divs
@@ -1224,15 +1203,17 @@ divs
     move.b  #'S',(a0)+
     move.b  #' ',(a0)+
     
-    moveq   #0,d1
-    jsr     ea_5_7_11_16
+    move.b  #5,d4
+    lea     compute_address_jump_table,a5
+    mulu    #8,d4
+    jsr     (a5,d4)
     rts
 
 or
     move.b  #'O',(a0)+
     move.b  #'R',(a0)+
     
-    move.b  #2,d4
+    move.b  #6,d4
     
     cmp.b   #0,d3
     beq     size_b
@@ -1275,11 +1256,17 @@ bclr
 
 
 bclr_static
-
+    jsr     get_source_mode_bits
+    cmp.b   #%000,d1
+    beq     size_l
+    bra     size_b
     rts
 
 bclr_dynamic
-
+    jsr     get_source_mode_bits
+    cmp.b   #%000,d1
+    beq     size_l
+    bra     size_b
     rts
     
 cmpi
@@ -1303,7 +1290,7 @@ eor
     move.b  #'O',(a0)+
     move.b  #'R',(a0)+
     
-    move.b  #2,d4
+    move.b  #6,d4
     
     cmp.b   #%100,d3
     beq     size_b
@@ -1481,6 +1468,12 @@ size_s
 *-----------------------------------------------------------
 *             Effective Addressing Helper Methods				 				
 *-----------------------------------------------------------
+get_op_code
+    move.w  d0,d1
+    lsr     #8,d1
+    lsr     #4,d1
+    rts
+    
 cut_opcode
     lsl.w   #4,d0
     lsr.w   #4,d0
@@ -1539,17 +1532,6 @@ get_direction_bit
     lsr.b   #2,d1
     rts
     
-ea_5_7_11_16
-    jsr     get_source
-    jsr     cut_opcode
-    move.b  #',',(a0)+
-    jsr     get_destination_register_bits
-    move.b  d1,d3
-    lea     address_mode_jump_table,a5
-    mulu    #8,d1
-    jsr     (a5,d1)
-    rts
-    
 compute_address_jump_table
     jsr     compute_address_0
     rts
@@ -1564,6 +1546,8 @@ compute_address_jump_table
     jsr     compute_address_5
     rts
     jsr     compute_address_6
+    rts
+    jsr     compute_address_7
     rts
     
 *-----------------------------------------------------------
@@ -1638,8 +1622,7 @@ compute_address_1
 
 compute_address_2
     jsr     cut_opcode
-    jsr     get_direction_bit
-    * more shit
+    
     rts
     
 compute_address_3
@@ -1688,10 +1671,40 @@ compute_address_5
 
 compute_address_6
     jsr     cut_opcode
+    jsr     get_direction_bit
+    cmp.b   #%0,d1
+    beq     reg_to_mem_compute_6
+    cmp.b   #%1,d1
+    beq     mem_to_reg_compute_6
+    rts
+    
+reg_to_mem_compute_6
     jsr     get_destination_register_bits
     move.b  d1,d3
     lea     address_mode_jump_table,a5
-    move.b #0,d1
+    jsr     (a5,d1)
+    move.b  #',',(a0)+
+    jsr     get_source    
+    rts
+    
+mem_to_reg_compute_6
+    jsr     get_source
+    move.b  #',',(a0)+
+    jsr     get_destination_register_bits
+    move.b  d1,d3
+    lea     address_mode_jump_table,a5
+    jsr     (a5,d1)
+    move.b  #',',(a0)+
+    rts
+    
+compute_address_7
+    jsr     cut_opcode
+    jsr     get_source
+    move.b  #',',(a0)+
+    jsr     get_destination_register_bits
+    move.b  d1,d3
+    lea     address_mode_jump_table,a5
+    move.b  #8,d1
     jsr     (a5,d1)
     rts
 *-----------------------------------------------------------
@@ -1741,8 +1754,14 @@ address_post_decrement
     rts
     
 immediate_data
+    cmp.b   #%000,d3
+    beq     absolute_word
+    cmp.b   #%001,d3
+    beq     absolute_long
+    
     move.b  #'#',(a0)+
     move.b  #'$',(a0)+
+
     
     cmp.b   #1,d6
     beq     immediate_byte
@@ -1752,13 +1771,24 @@ immediate_data
     beq     immediate_long
     
     rts
-  
+    
     
 garbage1
     rts
     
 garbage
     rts
+    
+absolute_word
+    move.b  #'$',(a0)+
+    bra     immediate_word
+    rts
+
+absolute_long
+    move.b  #'$',(a0)+
+    bra     immediate_long
+    rts    
+    
     
 immediate_byte
     move.w  (a2)+,d1
