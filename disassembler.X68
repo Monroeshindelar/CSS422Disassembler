@@ -14,6 +14,7 @@ start   org     $1000
 *-----------------------------------------------------------
 *				   Displaying Startup Message
 *-----------------------------------------------------------
+    
     lea     snp,a1
     move.b  #14,d0
     trap    #15 
@@ -44,7 +45,7 @@ start   org     $1000
     jsr     get_address
     movea.l d2,a3
     
-    *jsr     read_file
+    jsr     read_file
     
     lea     s_notif,a1
     move.b  #14,d0
@@ -963,6 +964,8 @@ check_e
     
     move.b  d1,d3                           * Else, it's register shift type. Store size in d3
     jsr     get_source_mode_bits
+    lsl.b   #6,d1
+    lsr.b   #6,d1
     cmp.b   #%00,d1
     beq     check_asd_register_shift
     
@@ -1528,6 +1531,9 @@ check_shift_size
     cmp.b   #%11,d1
     beq     size_w
     
+    cmp.b   #%01,d1
+    beq     size_w
+    
     cmp.b   #%00,d1
     beq     size_b
     
@@ -1621,8 +1627,9 @@ get_destination
     
 get_destination_register_bits
     move.w  d0,d1
+    lsl.w   #4,d1
     lsr.w   #8,d1
-    lsr.b   #1,d1
+    lsr.w   #5,d1
     rts
  
 get_destination_mode_bits
@@ -2050,6 +2057,7 @@ endinv  dc.b    'Something went very wrong...'                                  
         dc.b    'Exiting the program.'                                                       ,0  
 
     end    start
+
 
 
 
