@@ -1416,7 +1416,6 @@ bclr
     move.b  #'R',(a0)+
 
     jsr     get_destination_mode_bits
-    lsl.b   #2,d1
     lsr.b   #2,d1
 
     cmp.b   #%1,d1
@@ -1428,13 +1427,13 @@ bclr
 
 bclr_static
     move.b  #3,d4
-    
+    bra     size_b     
     rts
 
 bclr_dynamic
-    move.b  #5,d4
-    
-    rts
+    move.b  #8,d4
+    jsr     get_source_mode_bits
+ 
     
 cmpi
     move.b  #'C',(a0)+
@@ -1748,6 +1747,8 @@ compute_address_jump_table
     rts
     jsr     compute_address_7
     rts
+    jsr     compute_address_8
+    rts
     
 *-----------------------------------------------------------
 *                   Address Mode Jump Table				 			       
@@ -1931,13 +1932,12 @@ compute_address_7
     
 compute_address_8
     jsr     get_destination_register_bits
-    
-    rts
-    
-reg_to_mem_compute_8
-    rts
-    
-mem_to_reg_compute_8
+    move.b  d1,d3
+    move.b  #0,d1
+    lea     address_mode_jump_table,a5
+    jsr     (a5,d1)
+    move.b  #',',(a0)+
+    jsr     get_source
     rts
     
 *-----------------------------------------------------------
@@ -2177,6 +2177,7 @@ empty   dc.b    ''                                                              
 nx_pge  dc.b    'Press ENTER to proceed to the next page...'                                 ,0
 
     end    start
+
 
 
 
