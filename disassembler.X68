@@ -1129,10 +1129,8 @@ check_6
     
 check_bra
     move.w  d0,d1
+    
     jsr     get_displacement
-    
-    
-    
     cmp.b   #$FF,d1
     beq     data
     
@@ -1730,6 +1728,13 @@ skip_bcc
     cmp.b   #$00,d1
     beq     data
     
+get_s_displacement
+   move.b   d0,d1
+   sub.b    #1,d1
+   not      d1
+   rts
+   
+    
 compute_address_jump_table
     jsr     compute_address_0
     rts
@@ -2177,6 +2182,7 @@ empty   dc.b    ''                                                              
 nx_pge  dc.b    'Press ENTER to proceed to the next page...'                                 ,0
 
     end    start
+
 
 
 
