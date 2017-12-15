@@ -6,7 +6,10 @@
 * Description: 
 *-----------------------------------------------------------
 cr      equ     $0d
-lf      equ     $0a 
+lf      equ     $0a
+paddr1  equ     $00FFFF00
+minaddr equ     $00000000
+maxaddr equ     $00FFFE00
 
 start   org     $1000
 
@@ -14,140 +17,165 @@ start   org     $1000
 *				   Displaying Startup Message
 *-----------------------------------------------------------
     
-    lea     snp,a1
+    lea     snp,a1                                  * Loading the gretting message onto the console
     move.b  #14,d0
     trap    #15 
     
 *-----------------------------------------------------------
 *				           User Input				
 *-----------------------------------------------------------
-
-    move.b  #2,d0
+    move.b  #2,d0                                   * Asking the console for input from the user
     trap    #15
     clr     d0
-    jsr     convert_to_hex
-    jsr     prepare_to_load_address
-    jsr     get_address
-    movea.l d2,a2
-    
-    lea     entend,a1
+    jsr     convert_to_hex                          * Converting the input from ascii to hex
+    jsr     prepare_to_load_address                 * Prepping the address to be loaded into an address register
+    jsr     get_address                             * More converting of the user input
+    jsr     check_addr_legality                     * Checks the user input for edge cases. Stops the program for bad input
+    movea.l d2,a2                                   * Moves the converted address from the data register into the address register
+                    
+    lea     entend,a1                               * Asking the user for the ending address
     move.b  #14,d0
     trap    #15
-    
+
     lea     $0000,a0
     lea     $0200,a1
-    move.b  #2,d0
-    trap    #15
+    move.b  #2,d0                                   * Taking input from the user for the starting address
+    trap    #15     
     clr     d0
-    jsr     convert_to_hex
-    jsr     prepare_to_load_address
-    jsr     get_address
-    movea.l d2,a3
+    jsr     convert_to_hex                          * Converting the address from ascii to hex
+    jsr     prepare_to_load_address                 * Preps the address for loading into the reg
+    jsr     get_address                             * More address conversions
+    jsr     check_addr_mismatch                     * Checks if the ending address is smaller than the starting address
+    movea.l d2,a3                                   * Moves the ending address into the
     
-    jsr     read_file
+    jsr     request_read_from_file                  * Ask the user if they want to load from a file
     
-    lea     s_notif,a1
-    move.b  #14,d0
+decode_start
+    
+    lea     s_notif,a1                              * Notify the user that the program has started deconstruction
+    move.b  #14,d0                  
     trap    #15    
 
-    jsr     clear_all_data_registers
+    jsr     clear_all_data_registers                * Clears out the data registers for clarity
     
-loop
-    lea      $0000,a0
-    cmpa.l   a2,a3
-    ble      done
-    move.w   (a2)+,d0
-    jsr 	 evaluate_operation
-    jsr      print
-    bra      loop
+loop                                                * Main loop to go through the user input range of addresses
+    lea      $0000,a0       
+    cmpa.l   a2,a3                                  * Checks to see if we have hit the end of out address range
+    ble      done                                   * If the starting address is less than the ending address
+    move.w   (a2)+,d0                               * Grabs the next opcode from memory
+    jsr 	 evaluate_operation                     * Finds out what the opcode grabbed from memory is
+    jsr      print                                  * Prints the opcode to the console
+    bra      loop                                   * Start the loop again to go to the next opcode
     
 *-----------------------------------------------------------
 *				     Integrity Checks					
 *-----------------------------------------------------------
 
+check_addr_legality                                 * Checks to see if the input addresses are legal
+    jsr     check_addr_size                         * Check if the addresses are proper size
+    jsr     check_addr_even                         * Check to see if the address is even
+    rts 
+    
+check_addr_size                                     * Method to check if the address input is not too small or large
+    cmp.l   #minaddr,d2                             * Compare the input address to the minimum address
+    blt     invalid                                 * If its smaller, end the program
+    cmp.l   #maxaddr,d2                             * Compare the input address to the maximum address
+    bgt     invalid                                 * If its larger, end the program
+    rts         
 
+check_addr_even                                     * Method to check if the address input is odd or not
+    move.l  d2,d3                                   * Moves the input address into a new data register
+    asr     #1,d3                                   * Shifts off the last bit on the address
+    bcs     invalid                                 * If that last bit was a one, end the program
+    rts
 
-	
+check_addr_mismatch                                 * Checks if the starting and ending address are not in correct order
+    move.l  a2,d1                                   * Move the starting address into a data register
+    move.l  a3,d3                                   * Move the ending address into a data register
+    cmp.l   d1,d3                                   * Compare the two addresses
+    bgt     invalid                                 * If the ending address is larger than the starting address, end the program
+    rts  
+    
 *-----------------------------------------------------------
 *                       Conversion                  
 *-----------------------------------------------------------
-convert_to_hex
-    move.b  (a1)+,d1
-    beq     return_helper
-    cmp.w   #$FF,d1
-    beq     return_helper
-    addi.b  #1,d5
-    cmpi.b  #$30,d1
+convert_to_hex                                      * Method that converts data from ascii to hex
+    move.b  (a1)+,d1                                * Moves a byte from memory into a data register for conversion
+    beq     return_helper                           * If we have hit the null termination, we are done
+    cmp.w   #$FF,d1                                 * If we have hit FF we are done
+    beq     return_helper                                   
+    addi.b  #1,d5                                   * Add one to d5 for some reason
+    cmpi.b  #$30,d1                                 * Compare the data to 30, if its less, its bad data
     blt     invalid
-    cmpi.b  #$66,d1
+    cmpi.b  #$66,d1                                 * Compare the data to 66, if its greater, its bad data
     bgt     invalid
-    cmpi.b  #$39,d1
-    ble     convert_number_to_hex
-    cmpi.b  #$61,d1
-    bge     convert_lowercase_letter_to_hex
-    cmpi.b  #$46,d1
+    cmpi.b  #$39,d1                                 * Compare the data to 39, if its less than or equal to, its a number, convert it
+    ble     convert_number_to_hex                   
+    cmpi.b  #$61,d1                                 * Compare the data to 61, its ifs greater or equal, its lowercase, covert it
+    bge     convert_lowercase_letter_to_hex     
+    cmpi.b  #$46,d1                                 * Compare the data to 46, if its greater than, its bad data
     bgt     invalid
-    cmpi.b  #$41,d1
+    cmpi.b  #$41,d1                                 * Compare the data to 41, if its greater than or equal to, its uppercase, convert it
     bge     convert_uppercase_letter_to_hex
 
-convert_number_to_hex
-    subi.b  #$30,d1
-    move.b  d1,(a0)+
-    bra     convert_to_hex
+convert_number_to_hex                               * Method to convert a number from ascii to hex
+    subi.b  #$30,d1                                 * Subtract 30 from the ascii to get the hex
+    move.b  d1,(a0)+                                * Add the hex number to a0
+    bra     convert_to_hex                          * Go back and convert more stuff
 
-convert_lowercase_letter_to_hex
-    subi.b  #87,d1
-    move.b  d1,(a0)+
-    bra     convert_to_hex
+convert_lowercase_letter_to_hex                     * Method to convert a letter from lowercase to hex
+    subi.b  #87,d1                                  * Subtract 87 from it
+    move.b  d1,(a0)+                                * Move the hex value to the next spot in a0
+    bra     convert_to_hex                          * Go back and convert more stuff
 
-convert_uppercase_letter_to_hex
-    subi.b  #55,d1
-    move.b  d1,(a0)+
-    bra     convert_to_hex
+convert_uppercase_letter_to_hex                     * Method to convert a letter called uppercase to hex
+    subi.b  #55,d1                                  * Subtract 55 from the letter to get the hex
+    move.b  d1,(a0)+                                * Move it into the next slot in a0
+    bra     convert_to_hex                          * go back and convert more stuff
 
-prepare_to_load_address
+prepare_to_load_address                             * Method that prepares the address so it can be converted further
     clr     d0
     clr     d1
     clr     d2
     lea     $0000,a0
     rts
 
-get_address
-    move.b  (a0)+,d1
-    cmp.b   #0,d5
+get_address                                         * Method that trims 0's from the ascii to hex address
+    move.b  (a0)+,d1                                * Moves the ascii to hex address into a data register
+    cmp.b   #0,d5                                   * Checks if its 0, if it is we can return
     beq     return_helper
-    asl.l   #4,d2
-    add.b   d1,d2
-    subi.b  #1,d5
-    bra     get_address
+    asl.l   #4,d2                                   * Shifts a nibble off
+    add.b   d1,d2                                   * Adds d1 to d2
+    subi.b  #1,d5                                   * Subtracts 1 from d5, cant really remember why i did this
+    bra     get_address                             * Go back to convert the next byte
     
-read_file
-    lea     f_name,a1
-    move.b  #51,d0
+read_file                                           * Method to read a file of opcodes into memory for decoding
+    lea     f_name,a1                               * Loads the filename into memory so 68k can read it
+    move.b  #51,d0                                  
     trap    #15
-    move.l  #f_size,d2
+    move.l  #f_size,d2                              * Load the filesize into d2, precondition for file reading
     lea     $500,a1
     move.b  #53,d0
     trap    #15
-    movea.l a1,a6
+    movea.l a1,a6                                   
     movea.l a2,a4
-    jsr     convert_file_contents
-    rts
+    jsr     convert_file_contents                   * File is loaded in ascii, so this goes through all the file contents and converts it
+    bra     decode_start                            * Goes back to the start of the program to start decoding
     
-convert_file_contents
-    clr     d3
+convert_file_contents                               * Method to convert the file contents from ascii to hex
+    clr     d3              
     lea     $00a0,a0
-    cmp.w   #0,d2
-    beq     return_helper
-    move.w  (a1)+,d0
-    move.w  a1,d7
-    lea     $0010,a1
+    cmp.w   #0,d2                                   * D2 holds the number of bytes read, using it as a loop counter
+    beq     return_helper                           * If we have converted all the bytes, go back
+    move.w  (a1)+,d0                                * Move the next word into a data register for decoding
+    move.w  a1,d7                                   * Save the address so we can reload it
+    lea     $0010,a1                                
     move.w  d0,(a1)
-    jsr     convert_to_hex
+    jsr     convert_to_hex                          * Call convert to hex on whatever we just pulled from memory
     clr     d0
-    move.b  #2,d5
-    lea     $00a0,a0
-    jsr     convert_helper
+    move.b  #2,d5                                   * Really cant remember why im doing this
+    lea     $00a0,a0                
+    jsr     convert_helper                          
     movea.l d7,a1
     subi.b  #2,d2
     move.b  d3,(a4)+
@@ -161,50 +189,84 @@ convert_helper
     add.b   d0,d3
     subi.b  #1,d5
     bra     convert_helper
+   
+request_read_from_file                              * Method to request a read froma file
+    lea     reqf,a1                                 * Ask the user if they want to read from a file
+    move.b  #14,d0
+    trap    #15
     
-print
-    move.b  #$00,(a0)
-    lea     $0000,a1
-    moveq   #13,d0
+    move.b  #2,d0                                   * Take the input
+    trap    #15
+    
+    move.b  (A1),d1                                 * Check if the input was a yes or a no
+    cmpi.b  #$79,d1
+    beq     warn_file                               * If they said yes, Load a warnning and make sure they want to load froma file
+    cmpi.b  #$59,d1
+    beq     warn_file
+    cmpi.b  #$6e,d1
+    beq     decode_start
+    cmpi.b  #$4e,d1
+    beq     decode_start
+    bra     request_read_from_file                  
+    
+warn_file                                           * File reading warning
+    lea     warnf,a1                                * Load the file reading warning to the user
+    move.b  #14,d0
+    trap    #15
+    
+    move.b  #2,d0                                   * Ask the user for their input
+    trap    #15
+    
+    move.b  (A1),d1                                 * Checks the users input
+    cmpi.b  #$79,d1
+    beq     read_file
+    cmpi.b  #$59,d1
+    beq     read_file
+    cmpi.b  #$6e,d1
+    beq     decode_start
+    cmpi.b  #$4e,d1
+    beq     decode_start
+    bra     warn_file
+    
+print                                               * Prints the currently decoded opcode to the console
+    move.b  #$00,(a0)                               * Adds null termination to the op code
+    lea     $0000,a1                                * Loads the address where the opcode is stored
+    moveq   #13,d0                                  * Print the opcode
     trap    #15
     move.b  #16,d5
     lea     $0000,a0
     move.b  #30,d1
-    jsr     clear_address
+    jsr     check_page_count                        * Check if the page is full
+    jsr     clear_address                           * Clear out the address for the next opcode
     rts
     
-check_for_page_switch
-    subi.b  #1,d1
-    cmp.b   #0,d1
-    ble     attempt_page_switch
+check_page_count                                    * Checks if we have filled the console with prints
+    lea     paddr1,a4                               * Loads print counter into mem
+    addi.b  #$1,(a4)                                * Adds one to the print counter
+    cmpi.b  #$1e,(a4)                               * Compares the print counter to 30
+    beq     halt_print                              * If we have reached 30, stop printing until the user tells you to start again                                              
     rts
     
-attempt_page_switch
-    lea     nx_pge,a1
+halt_print                                          * Method that stops the printing and asks for user input
+    lea     nx_pge,a1                               * Loads the next page message
+    move.b  #14,d0                                  
+    trap    #15
+    
+    move.b  #2,d0                                   * Asks for the user input
+    trap    #15 
+    
+    cmpi.b  #$2,d0                                  * If its enter, go to print the next page
+    beq     continue_print                          
+    bra     halt_print                              * If its not enter, wait till it is
+    
+continue_print                                      * Method to print the next page
+    lea     empty,a1                                * Loads an empty string to start the new page
     move.b  #14,d0
     trap    #15
-    move.b  #2,d0
-    trap    #15
     
-    cmpi.b  #$2,d0
-    beq     switch_page
-    bra     continue_halt
-    
-continue_halt
-    move.b  #2,d0
-    trap    #15
-    
-    cmpi.b  #$2,d0
-    beq     switch_page
-    bra     continue_halt
-    
-switch_page
-    lea     empty,a1
-    move.b  #14,d0
-    trap    #15
-    move.b  #30,d1
-    rts
-    
+    lea     nx_pge,a4                               * Restarts the page counter
+    move.l  #$00000000,(a4)
+    rts    
 
 return_helper
     rts
@@ -220,27 +282,27 @@ clear_all_data_registers
     clr     d7
     rts
     
-clear_address
-    cmp.b   #0,d5
+clear_address                                       * Method to clear out an address. Clears out the address at a0
+    cmp.b   #0,d5                                   * Compares loop counter to 0 to check if we are done
     beq     return_helper
-    move.b  #$FF,(a0)+
-    subi.b  #1,d5
-    bra     clear_address
+    move.b  #$FF,(a0)+                              * Wipe the data at the current location in memory
+    subi.b  #1,d5                                   * Substract one from the loop counter
+    bra     clear_address                           * Keep going
     
-invalid
-    lea     endinv,a1
-    move.b  #14,d0
+invalid                                             * Method to end the program when something bad happens
+    lea     endinv,a1                               * Loads an error onto the console
+    move.b  #14,d0                                  
     trap    #15
-    bra     exit_prog
+    bra     exit_prog                               * Exits the program
 
-done
-    lea     endprog,a1
+done                                                * Method to be called when the program is done executing
+    lea     endprog,a1                              * Loads the successful message onto the console
     move.b  #14,d0
-    trap    #15
+    trap    #15                                     
     
-exit_prog
+exit_prog                                           * Method that exits the program
     move.b  #9,d0
-    trap    #15
+    trap    #15                                     * Exits the program
 
 
 
@@ -1129,8 +1191,10 @@ check_6
     
 check_bra
     move.w  d0,d1
-    
     jsr     get_displacement
+    
+    
+    
     cmp.b   #$FF,d1
     beq     data
     
@@ -1425,12 +1489,19 @@ bclr
 
 bclr_static
     move.b  #3,d4
+    jsr     get_source_mode_bits
+    cmp.b   #0,d1
+    beq     size_l
     bra     size_b     
     rts
 
 bclr_dynamic
     move.b  #8,d4
     jsr     get_source_mode_bits
+    cmp.b   #0,d1
+    beq     size_l
+    
+    bra     size_b
  
     
 cmpi
@@ -1648,94 +1719,87 @@ size_s
 *-----------------------------------------------------------
 *             Effective Addressing Helper Methods				 				
 *-----------------------------------------------------------
-get_op_code
-    move.w  d0,d1
-    lsr     #8,d1
-    lsr     #4,d1
+get_op_code                                         * Gets the first four bits of the op code for identification
+    move.w  d0,d1                                   * Puts a copy of the full operation into d1
+    lsr     #8,d1                                   * Shifts off a byte from the right side of the op code
+    lsr     #4,d1                                   * Shifts off a nibble from the right side
     rts
     
-cut_opcode
-    lsl.w   #4,d0
-    lsr.w   #4,d0
+cut_opcode                                          * Returns an op code where the first nibble is removed. For easier EA
+    lsl.w   #4,d0                                   * Shifts off a nibble from the left
+    lsr.w   #4,d0                                   * Shifts off a nibble from the right
     rts
     
-get_source
-    lea     address_mode_jump_table,a5
-    jsr     get_source_register_bits
-    move.b  d1,d3
-    jsr     get_source_mode_bits
-    mulu    #8,d1
-    jsr     (a5,d1)   
+get_source                                          * Method to get the source of an op code where it has the traditional 3 bits for M and 3 bits for Xn
+    lea     address_mode_jump_table,a5              * Loads the address jump table into memory
+    jsr     get_source_register_bits                * Gets the last three bits from the opcode
+    move.b  d1,d3                                   * Moves them into d3
+    jsr     get_source_mode_bits                    * Gets the next 3 bits to get the mode
+    mulu    #8,d1                                    
+    jsr     (a5,d1)                                 * Finds out the source mode and goes to that place in the jump table
     rts
 
-get_destination
-    lea     address_mode_jump_table,a5
-    jsr     get_destination_register_bits
-    move.b  d1,d3
-    jsr     get_destination_mode_bits
+get_destination                                     * Method to get the destination of an op code where it has the traditional 3 bits for M and 3 bits for Xn
+    lea     address_mode_jump_table,a5              * Loads the address jump table into memory
+    jsr     get_destination_register_bits           * Gets the middle/left three bits from the opcode
+    move.b  d1,d3                                   * Moves them into d3
+    jsr     get_destination_mode_bits               * Gets the leftmost 3 bits for the desetination mode
     mulu    #8,d1
-    jsr     (a5,d1)
+    jsr     (a5,d1)                                 * Finds out what the sourcemode is and does the proper thing
     rts
     
-get_destination_register_bits
-    move.w  d0,d1
-    lsl.w   #4,d1
-    lsr.w   #8,d1
-    lsr.w   #5,d1
+get_destination_register_bits                       * Gets the 3 leftmost bits from the opcode after the first nibble has been cut
+    move.w  d0,d1                                   * Moves a copy of the opcode into the first data register
+    lsl.w   #4,d1                                   * Shifts off a nibble from the left
+    lsr.w   #8,d1                                   * Shifts off a byte from the right
+    lsr.w   #5,d1                                   * Shifts off a nibble + 1 from the right
     rts
  
-get_destination_mode_bits
-    move.w  d0,d1
-    lsl.w   #7,d1
-    lsr.w   #8,d1
-    lsr.w   #5,d1
+get_destination_mode_bits                           * Gets the middle/left 3 bits from the opcode after the first nibble has been cut
+    move.w  d0,d1                                   * Moves a copy of the opcode into the first data register
+    lsl.w   #7,d1                                   * Shifts off one less than a byte from the left
+    lsr.w   #8,d1                                   * Shifts off a byte from the right
+    lsr.w   #5,d1                                   * Shifts off a nibble + 1 from the right
     rts
 
-get_source_mode_bits
-    move.w  d0,d1
-    lsl.w   #6,d1
-    lsl.w   #4,d1
-    lsr.w   #8,d1
-    lsr.w   #5,d1
+get_source_mode_bits                                * Gets the middle/rightmost 3 bits from the opcode after the first nibble has been cut
+    move.w  d0,d1                                   * Moves a copy from d1 to d2
+    lsl.w   #6,d1                                   * Shifts off a nibble and a half from the left
+    lsl.w   #4,d1                                   * Shifts off a nibble from the right
+    lsr.w   #8,d1                                   * Shifts off a byte from the right
+    lsr.w   #5,d1                                   * Shifts off a nibble + 1 from the right
     rts
     
-get_source_register_bits
-    move.w  d0,d1
-    lsl.w   #8,d1
-    lsl.w   #5,d1
-    lsr.w   #8,d1
-    lsr.b   #5,d1
+get_source_register_bits                            * Gets the rightmost 3 bits from the opcode after the first nibble has been cut
+    move.w  d0,d1                                   * Moves a copy into d1
+    lsl.w   #8,d1                                   * Shifts a byte off the left
+    lsl.w   #5,d1                                   * Shifts a nibble + 1 off the left
+    lsr.w   #8,d1                                   * Shifts a byte off the right
+    lsr.b   #5,d1                                   * Shifts a nibble + 1 off the right
     rts
     
-get_direction_bit
-    move.w  d0,d1
-    jsr     get_destination_mode_bits
-    lsr.b   #2,d1
+get_direction_bit                                   * Gets the direction bit for things like add and sub
+    move.w  d0,d1                                   * Moves a copy into d1
+    jsr     get_destination_mode_bits               * Gets the 3 bits where the destination bit lies
+    lsr.b   #2,d1                                   * Shift off the two unecessary ones
+    rts                                     
+    
+get_displacement                                    * Method to get the displacement for things like BRA                                   
+    lsl.l   #8,d1                                   * Shift a byte off the left
+    lsl.l   #8,d1                                   * Shift a byte off the left
+    lsl.l   #8,d1                                   * Shift a byte off the left
+    lsr.l   #8,d1                                   * Shift a byte off the right
+    lsr.l   #8,d1                                   * Shift a byte off the right
+    lsr.l   #8,d1                                   * Shift a byte off the right
     rts
     
-get_displacement
-    lsl.l   #8,d1
-    lsl.l   #8,d1
-    lsl.l   #8,d1
-    lsr.l   #8,d1
-    lsr.l   #8,d1
-    lsr.l   #8,d1
-    rts
+skip_bcc                                           * Skips data after a BCC so that we dont get ghost op code
+    jsr     data                                   * Prints data to show that we ate some data
+    jsr     get_displacement                       * Gets the displacement
+    cmp.b   #$00,d1                                * If the opcode was expecting data after it
+    beq     data                                   * Eat another word
     
-skip_bcc
-    jsr     data
-    jsr     get_displacement
-    cmp.b   #$00,d1
-    beq     data
-    
-get_s_displacement
-   move.b   d0,d1
-   sub.b    #1,d1
-   not      d1
-   rts
-   
-    
-compute_address_jump_table
+compute_address_jump_table                         * Jump table to get to the various methods for computing EA
     jsr     compute_address_0
     rts
     jsr     compute_address_1
@@ -1758,7 +1822,7 @@ compute_address_jump_table
 *-----------------------------------------------------------
 *                   Address Mode Jump Table				 			       
 *-----------------------------------------------------------
-address_mode_jump_table
+address_mode_jump_table                         * Jump table for going to different addressing modes
     jsr     data_register
     rts
     jsr     address_register
@@ -1779,7 +1843,7 @@ address_mode_jump_table
 *-----------------------------------------------------------
 *                        Hex Jump Table			 				
 *-----------------------------------------------------------
-hex_jump_table
+hex_jump_table                              * Jump table to make printing stuff easy
     jsr     zero
     rts
     jsr     one
@@ -1814,140 +1878,141 @@ hex_jump_table
     rts
     
     
-compute_address_0
-    jsr     cut_opcode 
-    jsr     get_source
-    move.b  #',',(a0)+
-    jsr     get_destination
+compute_address_0                           * Computes the address for things like move
+    jsr     cut_opcode                      * Cuts off the opcode
+    jsr     get_source                      * Prints the source
+    move.b  #',',(a0)+                      
+    jsr     get_destination                 * Prints the destination
     rts
     
-compute_address_1
-    jsr     cut_opcode
-    jsr     get_source
+compute_address_1                           * Computes the ea for stuff that only has a source
+    jsr     cut_opcode                      * Cuts the opcode
+    jsr     get_source                      * Prints the source
     rts
 
-compute_address_2
-    jsr     cut_opcode
-    jsr     get_displacement
-    cmp.b   #$00,d1
-    beq     displacement_word
-    bne     displacement_byte
+compute_address_2                           * Computes the opcode for things like BRA and Bcc
+    jsr     cut_opcode                      * Cuts the opcode
+    jsr     get_displacement                * Gets the displacement bits
+    cmp.b   #$00,d1                         * Checks if we need another word
+    beq     displacement_word               * If we do, get another word
+    bne     displacement_byte               * Otherwise get a byte
     rts
     
-
-    
-compute_address_3
-    move.b  #%111,d1
+compute_address_3                           * Computes the EA for stuff that only has immediate data as its source
+    move.b  #%111,d1                        * Load the source mode and register bits for immediate data
     move.b  #%100,d3
-    lea     address_mode_jump_table,a5
+    lea     address_mode_jump_table,a5      
     mulu    #8,d1
-    jsr     (a5,d1)
+    jsr     (a5,d1)                         * Force it to jump to the immediate data portion of the jump table
     move.b  #',',(a0)+
-    jsr     get_source
+    jsr     get_source                      * Gets the source as the destionation in this case
     rts
     
-compute_address_4
-    jsr     cut_opcode
-    jsr     get_source_mode_bits
-    lsr     #2,d1
+compute_address_4                           * Computes the address for things like lsl/asl
+    jsr     cut_opcode                      * Cuts off the op code
+    jsr     get_source_mode_bits            * Gets the source mode bits
+    lsr     #2,d1                           * Shifts off bits to get the mode bit
     cmp.b   #1,d1
-    beq     alt_compute_address_4
+    beq     alt_compute_address_4           * If its mode 1, go to alternate
     move.b  #'#',(a0)+
-    jsr     get_destination_register_bits
-    cmp.b   #0,d1
-    beq     shift_zero_to_eight_helper
-    jsr     finish_compute_address_4
+    jsr     get_destination_register_bits   * Get the destination register bits (These are the rotation bits)
+    cmp.b   #0,d1                           * Compare them to 0 (0 is 8)
+    beq     shift_zero_to_eight_helper      * If its zero, go get some help from elsewhere
+    jsr     finish_compute_address_4        * Finsih up somewhere else
     rts
     
-alt_compute_address_4
-    jsr     get_destination_register_bits
-    move.b  d1,d3
+alt_compute_address_4                       * If the mode is 1
+    jsr     get_destination_register_bits   * Get the destination register number
+    move.b  d1,d3                       
     move.b  #0,d1
     lea     address_mode_jump_table,a5
-    jsr     (a5,d1)
-    jsr     finish_compute_address_4_alt
+    jsr     (a5,d1)                         * Force it to go into the data register portion of the jump table
+    jsr     finish_compute_address_4_alt    * Finish somewhere else    
     rts
     
-shift_zero_to_eight_helper
-    move.b  #$8,d1
+shift_zero_to_eight_helper                  * What happens if the rotation is 000
+    move.b  #$8,d1                          * Put 8 in there instead
  
-finish_compute_address_4
-    mulu    #8,d1
+finish_compute_address_4                    * Finishes up computing the address
+    mulu    #8,d1                           * Gets the number to print for mode 0
     lea     hex_jump_table,a5
     jsr     (a5,d1)
 finish_compute_address_4_alt
-    move.b  #',',(a0)+
-    jsr     get_source_register_bits
+    move.b  #',',(a0)+                      
+    jsr     get_source_register_bits        * Getting the source, which is the register we are shifting
     move.b  d1,d3
     move.b  #0,d1
     lea     address_mode_jump_table,a5
-    jsr     (a5,d1)
+    jsr     (a5,d1)                         * Force it to go to the data register portion of the jump table
     rts
     
-compute_address_5
-    jsr     cut_opcode
-    jsr     get_source
-    jsr     get_destination_register_bits
-    move.b  #',',(a0)+
-    move.b  d1,d3
+compute_address_5                           * Computing the address for something where the destination has to be a data reg
+    jsr     cut_opcode                      * Cuts the opcode off
+    jsr     get_source                      * Prints the source
+    jsr     get_destination_register_bits   * Gets the data register number
+    move.b  #',',(a0)+                          
+    move.b  d1,d3                           
     move.b  #0,d1
-    lea     address_mode_jump_table,a5
+    lea     address_mode_jump_table,a5      * Forces it to go to the data resgister section of the addressing jump table
     jsr     (a5,d1)
     rts
 
-compute_address_6
-    jsr     cut_opcode
-    jsr     get_direction_bit
-    cmp.b   #%1,d1
-    beq     reg_to_mem_compute_6
-    cmp.b   #%0,d1
-    beq     mem_to_reg_compute_6
+compute_address_6                           * Computes the opcode for stuff with directional bits
+    jsr     cut_opcode                      * Cuts off the opcode
+    jsr     get_direction_bit               * Get the directional bit
+    cmp.b   #%1,d1                          * Check if its one
+    beq     reg_to_mem_compute_6            * If its one, go to reg to mem
+    cmp.b   #%0,d1                          * If its 0
+    beq     mem_to_reg_compute_6            * Go from mem to reg
     rts
     
-reg_to_mem_compute_6
-    jsr     get_destination_register_bits
-    move.b  d1,d3
-    lea     address_mode_jump_table,a5
-    move.b  #0,d1
+reg_to_mem_compute_6                        * Computes the EA if the directional bit is 1
+    jsr     get_destination_register_bits   * Gets the dest register
+    move.b  d1,d3                       
+    lea     address_mode_jump_table,a5      * Forces it into the data register addressing mode
+    move.b  #0,d1   
     jsr     (a5,d1)
     move.b  #',',(a0)+
-    jsr     get_source    
+    jsr     get_source                      * Prints the source    
     rts
     
-mem_to_reg_compute_6
-    jsr     get_source
-    move.b  #',',(a0)+
-    jsr     get_destination_register_bits
-    move.b  d1,d3
+mem_to_reg_compute_6                        * Computes the EA if the directional bit is 0
+    jsr     get_source                      * Gets the source
+    move.b  #',',(a0)+          
+    jsr     get_destination_register_bits   * Gets the destination register
+    move.b  d1,d3   
     move.b  #0,d1
-    lea     address_mode_jump_table,a5
+    lea     address_mode_jump_table,a5      * Forces it into data register addressing mode
     jsr     (a5,d1)
     rts
     
-compute_address_7
-    jsr     cut_opcode
-    jsr     get_source
-    move.b  #',',(a0)+
-    jsr     get_destination_register_bits
+compute_address_7                           * Computes the EA for something that requires an address register as its destination
+    jsr     cut_opcode                      * Cuts off the opcode
+    jsr     get_source                      * Prints the source
+    move.b  #',',(a0)+              
+    jsr     get_destination_register_bits   * Gets the destionation register bits
     move.b  d1,d3
-    lea     address_mode_jump_table,a5
+    move.b  #%1,d1                         
+    lea     address_mode_jump_table,a5      * Forces the jump table to go to address mode
     move.b  #8,d1
     jsr     (a5,d1)
     rts
     
-compute_address_8
-    jsr     get_destination_register_bits
+compute_address_8                           * Computes the address for BCLR
+    jsr     get_destination_register_bits   * Gets the destination register
     move.b  d1,d3
     move.b  #0,d1
-    lea     address_mode_jump_table,a5
-    jsr     (a5,d1)
+    lea     address_mode_jump_table,a5      * Forces the jump table to go to a data register
+    jsr     (a5,d1)                         
     move.b  #',',(a0)+
-    jsr     get_source
+    jsr     get_source                      * Prints the source
     rts
     
 *-----------------------------------------------------------
 *                     Addressing Modes				 				
 *-----------------------------------------------------------
+* Printing the various different addressing modes to memory. Often, the register # is stored
+* in d3 so that it can be printed with the addressing mode. Mode bits in d1, register bits d3 
 data_register
     move.b  #'D',(a0)+
     lea     hex_jump_table,a5
@@ -1992,9 +2057,9 @@ address_post_decrement
     rts
     
 immediate_data
-    cmp.b   #%000,d3
-    beq     absolute_word
-    cmp.b   #%001,d3
+    cmp.b   #%000,d3                * Checks if immediate data is actually short
+    beq     absolute_word   
+    cmp.b   #%001,d3                * Checks if immediate data is actually long
     beq     absolute_long
     
     move.b  #'#',(a0)+
@@ -2016,7 +2081,7 @@ garbage1
 garbage
     rts
     
-absolute_word
+absolute_word                       * Method to get the next word in mem when the opcode requires a short
     move.b  #'$',(a0)+
     bra     immediate_word
     rts
@@ -2027,70 +2092,70 @@ absolute_long
     rts    
     
     
-immediate_byte
-    move.w  (a2)+,d1
-immediate_byte_disp
-    move.w  d1,d4
-    lsl.w   #5,d4
-    lsl.w   #3,d4
-    lsr.w   #3,d4
-    lsr.w   #6,d4
-    lsr.w   #3,d4
-    lea     hex_jump_table,a5
+immediate_byte                      * Gets an immediate byte from memory
+    move.w  (a2)+,d1                * Pulls the next word out of memory
+immediate_byte_disp                 
+    move.w  d1,d4                   * Moves a copy of it into a data register
+    lsl.w   #5,d4                   * Shifts a nibble + 1 off the left
+    lsl.w   #3,d4                   * Shifts a nibble -1 off the right
+    lsr.w   #3,d4                   * Shifts a nibble -1 off the right
+    lsr.w   #6,d4                   * Shifts a nibble and a half off the right
+    lsr.w   #3,d4                   * Shifts a nibble - 1 from the right    
+    lea     hex_jump_table,a5       * Gets the hex value from the jump table
     mulu    #8,d4
     jsr     (a5,d4)
     move.w  d1,d4
-    lsl.w   #6,d4
-    lsl.w   #6,d4
-    lsr.w   #6,d4
-    lsr.w   #6,d4
-    mulu    #8,d4
+    lsl.w   #6,d4                   * Shifts a nibble and a half off the left                 
+    lsl.w   #6,d4                   * Shifts a nibble and a half off the left
+    lsr.w   #6,d4                   * Shifts a nibble and a half off the right
+    lsr.w   #6,d4                   * Shifts a nibble and a half off the right
+    mulu    #8,d4                   * Gets the hex value from the jump table
     jsr     (a5,d4)
     rts
     
 immediate_word
-    move.w  (a2)+,d1
-    move.w  d1,d4
-    lsr.w   #6,d4
-    lsr.w   #6,d4
-    lea     hex_jump_table,a5
-    mulu    #8,d4
+    move.w  (a2)+,d1                * Get the next word from mem
+    move.w  d1,d4                   * Move a copy into a data reg
+    lsr.w   #6,d4                   * Shifts a nibble and a half off the right
+    lsr.w   #6,d4                   * Shifts a nibble and a half off the right
+    lea     hex_jump_table,a5       * Gets the hex value from the jump table
+    mulu    #8,d4      
     jsr     (a5,d4)
     move.w  d1,d4
-    lsl.w   #4,d4
-    lsr.w   #6,d4
-    lsr.w   #6,d4
-    mulu    #8,d4
+    lsl.w   #4,d4                   * Shifts a nibble off the left
+    lsr.w   #6,d4                   * Shifts a nibble and a half off the right
+    lsr.w   #6,d4                   * Shifts a nibble and a half off the right
+    mulu    #8,d4                   * Gets the hex value from the jump table
+    jsr     (a5,d4)
+    move.w  d1,d4  
+    lsl.w   #8,d4                   * Shifts a byte off the left
+    lsr.w   #6,d4                   * Shifts a nibble and a half off the right
+    lsr.w   #6,d4                   * Shifts a nibble and a half off the right
+    mulu    #8,d4                   * Get the hex value 
     jsr     (a5,d4)
     move.w  d1,d4
-    lsl.w   #8,d4
-    lsr.w   #6,d4
-    lsr.w   #6,d4
-    mulu    #8,d4
-    jsr     (a5,d4)
-    move.w  d1,d4
-    lsl.w   #7,d4
-    lsl.w   #5,d4
-    lsr.w   #6,d4
-    lsr.w   #6,d4
-    mulu    #8,d4
+    lsl.w   #7,d4                   * Shift a byte - 1 off the left
+    lsl.w   #5,d4                   * Shift a nibble + 1 off the left
+    lsr.w   #6,d4                   * Shifts a nibble and a half off the right
+    lsr.w   #6,d4                   * Shifts a nibble and a half off the right
+    mulu    #8,d4                   * Get the hex value from the hex jump table
     jsr     (a5,d4)
     rts
     
-immediate_long
+immediate_long                      * Gets a long from mem by just getting two words
     jsr     immediate_word
     jsr     immediate_word
     rts
     
-displacement_word
+displacement_word                   * If the displacement is a word, get an immediate short from the jump table
     move.b  #%111,d1
-    move.b  #%000,d3
+    move.b  #%000,d3                * Force the jump table to give you an immediate short
     lea     address_mode_jump_table,a5
     mulu    #8,d1
     jsr     (a5,d1)
     rts
     
-displacement_byte
+displacement_byte                  * If the displacement is a byte, get the next byte using the immediate_byte method
     jsr     get_displacement
     jsr     immediate_byte_disp
     rts
@@ -2180,9 +2245,14 @@ endinv  dc.b    'Something went very wrong...'                                  
         dc.b    'Exiting the program.'                                                       ,0
 empty   dc.b    ''                                                                           ,0
 nx_pge  dc.b    'Press ENTER to proceed to the next page...'                                 ,0
-
+reqf    dc.b    'Would you like to load opcodes from a text file'                            ,cr,lf
+        dc.b    'starting at the specified starting address?(y/n)'                           ,0
+warnf   dc.b    'WARNING: Reading from a file can potentially cause the'                     ,cr,lf
+        dc.b    'program to malfunction if data existed in the specified'                    ,cr,lf
+        dc.b    'address range. Please read the readme(FileIO) for '                         ,cr,lf
+        dc.b    'information regarding how to format your file. Do you '                     ,cr,lf
+        dc.b    'still want to proceed with file reading?(y/n)'                              ,0
     end    start
-
 
 
 
