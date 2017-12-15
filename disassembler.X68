@@ -13,6 +13,7 @@ start   org     $1000
 *-----------------------------------------------------------
 *				   Displaying Startup Message
 *-----------------------------------------------------------
+    
     lea     snp,a1
     move.b  #14,d0
     trap    #15 
@@ -43,7 +44,7 @@ start   org     $1000
     jsr     get_address
     movea.l d2,a3
     
-    *jsr     read_file
+    jsr     read_file
     
     lea     s_notif,a1
     move.b  #14,d0
@@ -372,11 +373,20 @@ check_add_type
     cmp.b   #6,d1
     beq     data
 
+    cmp.b   #1,d1
+    beq     check_valid_add_size
+    
     cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
     beq     check_add_source_register
     
        
     bra     add                             *Otherwise it's just ADD
+    
+check_valid_add_size
+    cmp.b   #0,d3
+    beq     data                            * size of ADD in address mode direct (001) cannot be a byte (opmode :000)
+    
+    bra     add
     
 add_EA_destination_type
     jsr     get_source_mode_bits
@@ -466,10 +476,19 @@ check_sub_type
     cmp.b   #6,d1
     beq     data
     
+    cmp.b   #1,d1
+    beq     check_valid_sub_size
+    
     cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
     beq     check_sub_source_register
   
     bra     sub                             *Otherwise it's just SUB
+    
+check_valid_sub_size
+    cmp.b   #0,d3
+    beq     data
+    
+    bra     sub
 
 sub_EA_destination_type
     jsr     get_source_mode_bits
@@ -1112,6 +1131,8 @@ check_bra
     move.w  d0,d1
     jsr     get_displacement
     
+    
+    
     cmp.b   #$FF,d1
     beq     data
     
@@ -1143,11 +1164,11 @@ check_bge
     move.w  d0,d1
     cmp.b   #$FF,d1
     beq     data
-    
     bra     bge
 
 check_blt
     move.w  d0,d1
+
     cmp.b   #$FF,d1
     beq     data
     
@@ -1155,6 +1176,7 @@ check_blt
 
 check_bvc
     move.w  d0,d1
+
     cmp.b   #$FF,d1
     beq     data
     
@@ -1493,6 +1515,7 @@ bra
     move.b  #'R',(a0)+
     move.b  #'A',(a0)+
     
+
     move.b  #2,d4
     
     cmp.b   #$00,d1
@@ -1504,7 +1527,7 @@ bcs
     move.b  #'B',(a0)+
     move.b  #'C',(a0)+
     move.b  #'S',(a0)+
-    
+
     move.b  #2,d4
     
     
@@ -1525,20 +1548,19 @@ bge
     beq     size_w
     
     bra     size_s
-
     
 blt
     move.b  #'B',(a0)+
     move.b  #'L',(a0)+
     move.b  #'T',(a0)+
     
+
     move.b  #2,d4
     
     cmp.b   #$00,d1
     beq     size_w
     
     bra     size_s
-
     
     
 bvc
@@ -1546,6 +1568,7 @@ bvc
     move.b  #'V',(a0)+
     move.b  #'C',(a0)+
     
+
     move.b  #2,d4
 
     cmp.b   #$00,d1
@@ -1563,6 +1586,9 @@ return_to_sub
     
 
 check_shift_size
+    cmp.b   #%01,d1
+    beq     size_w
+    
     cmp.b   #%01,d1
     beq     size_w
     
@@ -1656,8 +1682,9 @@ get_destination
     
 get_destination_register_bits
     move.w  d0,d1
+    lsl.w   #4,d1
     lsr.w   #8,d1
-    lsr.b   #1,d1
+    lsr.w   #5,d1
     rts
  
 get_destination_mode_bits
