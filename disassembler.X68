@@ -24,6 +24,7 @@ start   org     $1000
 *-----------------------------------------------------------
 *				           User Input				
 *-----------------------------------------------------------
+
     move.b  #2,d0                                   * Asking the console for input from the user
     trap    #15
     clr     d0
@@ -48,7 +49,10 @@ start   org     $1000
     jsr     check_addr_mismatch                     * Checks if the ending address is smaller than the starting address
     movea.l d2,a3                                   * Moves the ending address into the
     
+                                    
+
     jsr     request_read_from_file                  * Ask the user if they want to load from a file
+
     
 decode_start
     
@@ -307,8 +311,8 @@ exit_prog                                           * Method that exits the prog
 
 
 evaluate_operation
-    jsr     get_op_code                 * May put check for 0100 opcodes up here later
-    move.b  d1,d7
+    jsr     get_op_code                 * Gets the full 16 bit opcode for disassembling
+    move.b  d1,d7                       
     
     cmp.w   #7,d1                       * checks if the first 4 bits is 0111 (7) which doesn't exist in our supporting list of opcodes
     beq     data
@@ -329,10 +333,10 @@ evaluate_operation
     beq     check_move_type             * check for MOVE.L
     
     cmp.b   #4,d1
-    beq     check_4                     * Branch to code that checks through a set of opcodes with 0100 as their start (big endian)
+    beq     check_4                     * Branch to code that checks through a set of opcodes with #4 as their start (big endian)
                                     
                                     
-    cmp.b   #%1101,d1                   * Check for ADD
+    cmp.b   #%1101,d1                   * Check for ADD, ADDA
     beq     check_add_type
     
     cmp.b   #%1001,d1                   * Check for SUB
@@ -347,7 +351,7 @@ evaluate_operation
     cmp.b   #$C,d1
     beq     check_muls                  * Check if the opcode is MULS
     
-    cmp.b   #0,d1
+    cmp.b   #0,d1                       * Check for ORI, CMPI, and BCLR
     beq     check_0
     
     cmp.b   #$B,d1
@@ -361,15 +365,15 @@ evaluate_operation
     
     bra     data                        * Otherwise, it's data
 
-check_move_type
+check_move_type                         * Check the type of MOVE: MOVE or MOVEA
     move.b  #0,d4 
     move.b  d1,d3                       * store size of move
     jsr     get_source_mode_bits
     
-    cmp.b   #5,d1
+    cmp.b   #5,d1                       * If the source mode is displacement (101 or 110), it's data
     beq     data
     
-    cmp.b   #6,d1
+    cmp.b   #6,d1                       
     beq     data
 
     
@@ -377,33 +381,26 @@ check_move_type
     beq     check_move_source_register 
     
     
-continue_move_check
+continue_move_check                     
     jsr     get_destination_mode_bits
     cmp.b   #%001,d1
     beq     moveA                       * If destination mode bits are 001, it's MOVEA
-    
-
-    cmp.b   #%101,d1
-    beq     data
-    
-    cmp.b   #%110,d1
-    beq     data
     
     cmp.b   #%111,d1
     beq     check_move_destination_register    * If destination mode is 111, check the register for validity
     
     bra     move                        *Otherwise, it's a valid MOVE
 
-check_move_destination_register
+check_move_destination_register             * This label checks for valid destination register bits when mode bits are 111
     jsr     get_destination_register_bits
-    cmp.b   #%001,d1
+    cmp.b   #%001,d1                        * destination register bits cannot be more than 1 for valid instruction
     bgt     data
     
     bra     move                          * Otherwise, it's a valid MOVE
     
-check_move_source_register
+check_move_source_register          
     jsr     get_source_register_bits
-    cmp.b   #%010,d1
+    cmp.b   #%010,d1                    * when source mode bits are 111, source register bits cannot be 2,3, or bigger than 4.
     beq     data
     
     cmp.b   #%011,d1
@@ -411,10 +408,10 @@ check_move_source_register
     cmp.b   #4,d1
     bgt     data
     
-    bra    continue_move_check
+    bra    continue_move_check          * Otherwise, it's a valid move
     
 
-check_add_type
+check_add_type                              * This label checks for the type of ADD: ADD or ADDA
     jsr     get_destination_mode_bits
     move.b  d1,d3                           *Storing size in d3
     
@@ -429,13 +426,13 @@ check_add_type
     beq     add_EA_destination_type
     
     jsr     get_source_mode_bits           * Otherwise, it uses a data register as the destination (<ea> + Dn -> Dn), so check the available addressing for that
-    cmp.b   #5,d1
+    cmp.b   #5,d1                          * Same as before in MOVE, check for displacement mode bits (5 and 6)
     beq     data
     
-    cmp.b   #6,d1
-    beq     data
+    cmp.b   #6,d1                   
+    beq     data    
 
-    cmp.b   #1,d1
+    cmp.b   #1,d1                           * if the addressing mode is 1 (address register direct), check for a valid size
     beq     check_valid_add_size
     
     cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
@@ -450,9 +447,9 @@ check_valid_add_size
     
     bra     add
     
-add_EA_destination_type
+add_EA_destination_type                     * This label checks for valid source modes when the destination is <EA> type (directional bit is 1)
     jsr     get_source_mode_bits
-    cmp.b   #5,d1
+    cmp.b   #5,d1                           * checking for displacement modes (5 and 6)
     beq     data
     
     cmp.b   #6,d1
@@ -466,22 +463,20 @@ add_EA_destination_type
     
     bra     add                             * Otherwise, it's a legit ADD
     
-check_add_source_registerEA
+check_add_source_registerEA                 * checks the source register when mode is 111 in EA destination mode
     jsr     get_source_register_bits
     cmp.b   #%01,d1
     bgt     data                            * register bits cannot be greater than 1
     
     bra     add                             * otherwise it's a valid ADD
     
-check_add_source_register
+check_add_source_register                   * checks the source register when mode is 111
     jsr     get_source_register_bits
-    cmp.b   #%010,d1
+    cmp.b   #%010,d1                        * bits cannot be 2 or 3 (displacement)
     beq     data
     
     cmp.b   #%011,d1
     beq     data
-
-
     
     cmp.b   #4,d1                           *If register bits is greater than 4, it's DATA
     bgt     data
@@ -492,7 +487,7 @@ check_add_source_register
 check_addA_mode
     move.b  d1,d3                           * Move the size bit into d3
     jsr     get_source_mode_bits
-    cmp.b   #5,d1
+    cmp.b   #5,d1                           * The same displacement mode check here
     beq     data
     
     cmp.b   #6,d1
@@ -505,7 +500,7 @@ check_addA_mode
     
 check_addA_source_register
     jsr     get_source_register_bits
-    cmp.b   #%010,d1
+    cmp.b   #%010,d1                        * The same displacement mode check here for register checking when mode is 111
     beq     data
     
     cmp.b   #%011,d1
@@ -539,20 +534,20 @@ check_sub_type
     beq     data
     
     cmp.b   #1,d1
-    beq     check_valid_sub_size
+    beq     check_valid_sub_size            * check for a valid sub size
     
     cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
     beq     check_sub_source_register
   
     bra     sub                             *Otherwise it's just SUB
     
-check_valid_sub_size
+check_valid_sub_size                        * If addressing mode is address mode direct (001) cannot have byte size
     cmp.b   #0,d3
     beq     data
     
     bra     sub
 
-sub_EA_destination_type
+sub_EA_destination_type                     * This label checks for valid source modes in EA destination type (direcitonal bit == 1)
     jsr     get_source_mode_bits
     cmp.b   #5,d1
     beq     data
@@ -568,14 +563,14 @@ sub_EA_destination_type
     
     bra     sub
 
-check_sub_source_registerEA
+check_sub_source_registerEA                 * This label checks for valid source registers in EA destination type when mode is 111
     jsr     get_source_register_bits
-    cmp.b   #%001,d1
+    cmp.b   #%001,d1                        * Register bits cannot be bigger than 1 for valid instruction
     bgt     data
     
-    bra     sub
+    bra     sub                             
     
-check_sub_source_register
+check_sub_source_register                   * This label is used to check the source register for Data register destination type when mode is 111
     jsr     get_source_register_bits
     cmp.b   #%010,d1
     beq     data
@@ -588,10 +583,10 @@ check_sub_source_register
     
     bra     sub
     
-check_subq
+check_subq                              * Label for checking valid subq opcode
     jsr     get_destination_mode_bits
     move.b  d1,d3
-    lsl.b   #6,d3
+    lsl.b   #6,d3                       * Isolating size bits
     lsr.b   #6,d3                       * Storing size in d3
     cmp.b   #%11,d3                     * If size was 11, it's invalid because those bits are reserved for Scc and DBcc, which are not supported
     beq     data
@@ -600,7 +595,7 @@ check_subq
     cmp.b   #0,d1                       * If bit was 0, it's ADDQ which is not supported
     beq     data
     
-    jsr     get_source_mode_bits
+    jsr     get_source_mode_bits        * Check for displacement bits here
     cmp.b   #5,d1
     beq     data
     
@@ -636,21 +631,22 @@ check_4                                 * Supported 0100 opcodes: MOVEM, LEA, NE
     lsr     #1,d1
     move.b  d1,d3
     
-    jsr     get_destination_register_bits
-    lsl.w   #7,d1
-    add.b   d1,d3
+    jsr     get_destination_register_bits 
+    lsl.w   #7,d1                       * This is suppose to be a very weird AND operation for determining MOVEM
+    add.b   d1,d3                       * What's happening is that I take the 2 bits (big endian) of the destination mode
+                                        * take the first bit of the destination register by collecting the destination register bits as a whole word,
+    lsl.w   #8,d1                       * shifting it to the left (byte range) 7 times (shifting the last 2 register bits out of byte range),
+    lsl.b   #2,d1                       * then adding (byte range) it to the 2 destination mode bits
+    add.b   d1,d3                       * Then I shift the 2 bits back into byte range and isolate the last bit (from the left) and add that as well
     
-    lsl.w   #8,d1
-    add.b   d1,d3                       * A really weird pseudo AND operation
-    
-    cmp.b   #%10,d3
-    beq     check_moveM                 * This could be a MOVEM operation. Checking if it's valid
+    cmp.b   #%10,d3                     * What this results in is a unique value that cannot be obtained from any other 0100 opcode, besides MOVEM and EXT
+    beq     check_moveM                 * Since we've reduced it down to MOVEM and EXT, the program does further checks to see if it is a legit MOVEM
     
     
     bra     data                        * Otherwise, it's invalid
 
 
-check_neg
+check_neg                               * The NEG checker
     jsr     get_destination_mode_bits
     cmp.b   #%11,d1
     beq     data                        * If size bits is %11, it's invalid
@@ -679,7 +675,7 @@ check_neg_source_register
     bra     neg                         * otherwise, it's a valid NEG
     
 
-check_jsr
+check_jsr                               * The JSR checker
     jsr     get_source_mode_bits
     cmp.b   #%010,d1                    * Valid mode bits are 010, 101, 110, and 111 with specific register bits
     beq     jsr
@@ -697,13 +693,13 @@ check_jsr_source_register
     bra     jsr                         * Otherwise, it's a valid JSR
     
     
-check_lea
+check_lea                               * The LEA checker
     jsr     get_source_mode_bits
     cmp.b   #%010,d1
     beq     lea
     
     cmp.b   #%111,d1
-    beq     check_lea_source_register
+    beq     check_lea_source_register   * check lea's source regiser bits if mode is 111
     
     bra     data                        * Otherwise it's invalid               
     
@@ -717,7 +713,7 @@ check_lea_source_register
 check_movem
     jsr     get_source_mode_bits
     move.b  d1,d3
-    cmp.b   #%010,d3
+    cmp.b   #%010,d3                    * if source mode bits is #2, it's a valid MOVEM
     beq     moveM
     
     jsr     get_destination_register_bits
@@ -725,13 +721,13 @@ check_movem
     lsr.b   #7,d1                       * Isolate the directional bit
     
     cmp.b   #%111,d3
-    beq     check_moveM_reg
+    beq     check_moveM_reg             * Check the register bits for validity if mode bits are 111
     
     cmp.b   #1,d1
-    beq     moveM_memToReg
+    beq     moveM_memToReg              * If the directional bit is 1, it's memory to register mode
     
-    cmp.b   #%100,d3
-    beq     moveM
+    cmp.b   #%100,d3                    * If it's not, it's in register to memory mode, which has access to predecrement address register indirect
+    beq     moveM                       * if it's bits are #4, it's a valid moveM
     
     bra     data                        * Otherwise, it's not MOVEM
 
@@ -749,36 +745,41 @@ moveM_memToReg                          * This section checks addressing modes t
     
     bra     data                        * otherwise it's not MOVEM
     
-    
-check_8
+                                        *------------------------------------------------------------------------------------------------
+                                        * NOTE: At this point, most of the decoding code for each opcode becomes very similar, 
+                                        * so some comments are unnecessary for explanation.
+                                        *------------------------------------------------------------------------------------------------
+                                        
+                                        
+check_8                                 * This label checks for opcodes with 8 as their starting hex
     jsr     get_destination_mode_bits
     cmp.b   #%111,d1
     beq     check_divs                  * Check if it's a valid DIVS
     
     cmp.b   #%011,d1
-    bne     check_or
+    bne     check_or                    * check if it's a valid OR
     
     bra     data                        * Otherwise, it's invalid
     rts
 
 check_divs
-    jsr     get_source_mode_bits
+    jsr     get_source_mode_bits        * Like before, checking for displacement mode bits
     cmp.b   #5,d1
     beq     data
     
     cmp.b   #6,d1
     beq     data
 
-    cmp.b   #%001,d1
+    cmp.b   #%001,d1                    * DIVS does not support address mode direct as a source
     beq     data
     
-    cmp.b   #%111,d1
+    cmp.b   #%111,d1                    * If mode bits are 111, check for valid register bits
     beq     check_divs_source_register
     
-    bra     divs
+    bra     divs                        * Otherwise it's a valid DIVS
     
 check_divs_source_register
-    jsr     get_source_register_bits
+    jsr     get_source_register_bits    * Check for valid register bits here when mode bits are 111
     cmp.b   #%010,d1
     beq     data
     
@@ -791,83 +792,83 @@ check_divs_source_register
     bra     divs
     
     
-check_muls
+check_muls                                * This label checks for a valid MULS instruction
     jsr     get_destination_mode_bits
-    cmp.b   #%111,d1
-    beq     check_muls_source_mode
+    cmp.b   #%111,d1                    
+    beq     check_muls_source_mode        * If destination mode bits is 111, it's most likely MULS. Check the source mode for valid EA modes
     bne     data
     rts
     
 check_muls_source_mode
-    jsr     get_source_mode_bits
+    jsr     get_source_mode_bits          * Same displacement-checking code as before
     cmp.b   #5,d1
     beq     data
     
     cmp.b   #6,d1
     beq     data
 
-    cmp.b   #%001,d1
+    cmp.b   #%001,d1                        * MULS does not support address register direct
     beq     data
     
     cmp.b   #%111,d1
-    beq     check_muls_source_register
+    beq     check_muls_source_register      * If source mode bits are 111, check source register bits for validity
     
     bra     muls
     
 check_muls_source_register
-    jsr     get_source_register_bits
+    jsr     get_source_register_bits    * Same displacement-checking code as before, and no register bits exist above 4 for valid 111 modes
     cmp.b   #%010,d1
     beq     data
     
-    cmp.b   #%011,d1
+    cmp.b   #%011,d1                    
     beq     data
 
-    cmp.b   #%100,d1
+    cmp.b   #%100,d1                    
     bgt     data
     
     bra     muls
-
-check_or
+                                            
+check_or                                    * Label for checking OR
     move.b  d1,d3
     lsl.b   #6,d3
-    lsr.b   #6,d3                           * getting size
+    lsr.b   #6,d3                           * getting size by shifting and isolating first 2 bits(little endian)
     
     lsr.b   #2,d1                           * Isolate direction bit
     
     cmp.b   #1,d1                           * If direction bit is 1, location is destination operand, otherwise, location is source operand
     beq     check_or_destination_operand
     
-    jsr     get_source_mode_bits
+    jsr     get_source_mode_bits            * Displacement checking code
     cmp.b   #5,d1
     beq     data
     
     cmp.b   #6,d1
     beq     data
 
-    cmp.b   #%001,d1
+    cmp.b   #%001,d1                        * OR does not support address mode direct
     beq     data
     
-    cmp.b   #%111,d1
-    beq     check_or_source_register0
+    cmp.b   #%111,d1    
+    beq     check_or_source_register0       * Checking register bits in 111 mode
     
     bra     or
     
-check_or_source_register0
-    jsr     get_source_register_bits
+check_or_source_register0                   * Label for checking register bits in 111 mode in direction 0
+    jsr     get_source_register_bits        * Displacement-checking code for 111 mode, and code for checking register bits greater than 4
     cmp.b   #%010,d1
     beq     data
     
     cmp.b   #%011,d1
     beq     data
 
-    cmp.b   #%100,d1
+    cmp.b   #%100,d1            
     bgt     data
     
     bra     or
     
-check_or_destination_operand
+check_or_destination_operand                * Label for checking when OR is in destination operand mode (direction bit is 1)
     jsr     get_source_mode_bits
-    cmp.b   #5,d1
+    cmp.b   #5,d1                           * Displacement checking code
     beq     data
     
     cmp.b   #6,d1
@@ -888,7 +889,7 @@ check_or_source_register1
     
     bra     or
 
-check_0
+check_0                                        * This label checks for opcodes that start with 0000
     move.w  d0,d1
     lsr.w   #6,d1
     
@@ -934,7 +935,7 @@ check_ori_source_register
     bra     ori
     
 check_bclr                                      * checks for valid source modes in BCLR static
-    jsr     get_source_mode_bits
+    jsr     get_source_mode_bits                
     cmp.b   #5,d1
     beq     data
     
@@ -959,7 +960,7 @@ check_bclr_source_register
 check_cmpi
     jsr     get_destination_mode_bits
     cmp.b   #%11,d1
-    beq     data                                * size cannot be 011
+    beq     data                                * size cannot be 011 for CMPI
     
     move.b  d1,d3
     
@@ -996,7 +997,7 @@ check_b
 check_eor
     rol.w   #2,d1
     cmp.b   #%111,d1
-    beq     data                               *size cannot be 111 (7)
+    beq     data                               * For EOR, size cannot be 111
     
     move.b  d1,d3
     
@@ -1048,7 +1049,7 @@ continue_cmp
     
 check_legit_cmp_size
     cmp.b   #0,d3
-    beq     data                        * If using address register direct, cannot have byte size
+    beq     data                        * If using address register direct, cannot have byte size for CMP
     
     bra     continue_cmp
     
@@ -1065,10 +1066,10 @@ check_cmp_source_register
     
     bra     cmp
 
-check_e
+check_e                                     * This is a label for checking ASL/ASR, LSL/LSR, and ROL/ROR
     jsr     get_destination_mode_bits
     lsl.b   #6,d1
-    lsr.b   #6,d1
+    lsr.b   #6,d1                           * Isolate the size bits
     
     cmp.b   #%11,d1                         * If size bit is 11, it's a memory shift type
     beq     check_memory_shift_type
@@ -1076,7 +1077,7 @@ check_e
     move.b  d1,d3                           * Else, it's register shift type. Store size in d3
     jsr     get_source_mode_bits
     lsl.b   #6,d1
-    lsr.b   #6,d1
+    lsr.b   #6,d1                           * Isolate the size bits (again) for register shift opcode type
     cmp.b   #%00,d1
     beq     check_asd_register_shift
     
@@ -1177,7 +1178,7 @@ check_rod_memory_shift_register                        *checks rod memory shift 
     
     bra     rod
 
-check_6
+check_6                                                 * This is a label for checking 0110 opcodes (the branching codes)
     move.w  d0,d1
     lsr.w   #8,d1
     
@@ -1192,15 +1193,14 @@ check_6
 check_bra
     move.w  d0,d1
     jsr     get_displacement
-    
-    
-    
-    cmp.b   #$FF,d1
+
+    cmp.b   #$FF,d1                                     *If displacement value is FF, it's data (we don't support long)
+
     beq     data
     
-    bra     bra
+    bra     bra                                         * Otherwise, it's a legit branch type
 
-check_Bcc_type
+check_Bcc_type                                          * By checking the first 8 bits (big endian) we can determine what branch type it is
     cmp.b   #$65,d1
     beq     check_bcs
     
@@ -1489,10 +1489,13 @@ bclr
 
 bclr_static
     move.b  #3,d4
+    
     jsr     get_source_mode_bits
     cmp.b   #0,d1
     beq     size_l
-    bra     size_b     
+    
+    bra     size_b
+  
     rts
 
 bclr_dynamic
@@ -2253,6 +2256,8 @@ warnf   dc.b    'WARNING: Reading from a file can potentially cause the'        
         dc.b    'information regarding how to format your file. Do you '                     ,cr,lf
         dc.b    'still want to proceed with file reading?(y/n)'                              ,0
     end    start
+
+
 
 
 
