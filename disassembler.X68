@@ -6,8 +6,7 @@
 * Description: 
 *-----------------------------------------------------------
 cr      equ     $0d
-lf      equ     $0a
-exit    equ     $2700    
+lf      equ     $0a 
 
 start   org     $1000
 
@@ -51,11 +50,10 @@ start   org     $1000
     trap    #15    
 
     jsr     clear_all_data_registers
-    lea     $0000,a0
     
 loop
     lea      $0000,a0
-    cmp.l    a2,a3
+    cmpa.l   a2,a3
     ble      done
     move.w   (a2)+,d0
     jsr 	 evaluate_operation
@@ -75,7 +73,7 @@ loop
 convert_to_hex
     move.b  (a1)+,d1
     beq     return_helper
-    cmp.b   #$FF,d1
+    cmp.w   #$FF,d1
     beq     return_helper
     addi.b  #1,d5
     cmpi.b  #$30,d1
@@ -126,7 +124,6 @@ read_file
     lea     f_name,a1
     move.b  #51,d0
     trap    #15
-    
     move.l  #f_size,d2
     lea     $500,a1
     move.b  #53,d0
@@ -171,8 +168,42 @@ print
     trap    #15
     move.b  #16,d5
     lea     $0000,a0
+    move.b  #30,d1
     jsr     clear_address
     rts
+    
+check_for_page_switch
+    subi.b  #1,d1
+    cmp.b   #0,d1
+    ble     attempt_page_switch
+    rts
+    
+attempt_page_switch
+    lea     nx_pge,a1
+    move.b  #14,d0
+    trap    #15
+    move.b  #2,d0
+    trap    #15
+    
+    cmpi.b  #$2,d0
+    beq     switch_page
+    bra     continue_halt
+    
+continue_halt
+    move.b  #2,d0
+    trap    #15
+    
+    cmpi.b  #$2,d0
+    beq     switch_page
+    bra     continue_halt
+    
+switch_page
+    lea     empty,a1
+    move.b  #14,d0
+    trap    #15
+    move.b  #30,d1
+    rts
+    
 
 return_helper
     rts
@@ -963,6 +994,8 @@ check_e
     
     move.b  d1,d3                           * Else, it's register shift type. Store size in d3
     jsr     get_source_mode_bits
+    lsl.b   #6,d1
+    lsr.b   #6,d1
     cmp.b   #%00,d1
     beq     check_asd_register_shift
     
@@ -1077,13 +1110,12 @@ check_6
     
 check_bra
     move.w  d0,d1
-    cmp.b   #$FE,d1
-    beq     bra
+    jsr     get_displacement
     
-    cmp.b   #$00,d1
-    beq     bra
+    cmp.b   #$FF,d1
+    beq     data
     
-    bra     data
+    bra     bra
 
 check_Bcc_type
     cmp.b   #$65,d1
@@ -1098,47 +1130,40 @@ check_Bcc_type
     cmp.b   #$68,d1
     beq     check_bvc
     
-    bra     data
+    bra     bcc_data
     
 check_bcs
     move.w  d0,d1
-    cmp.b   #$FE,d1
-    beq     bcs
+    cmp.b   #$FF,d1
+    beq     data
     
-    cmp.b   #$00,d1
-    beq     bcs
-    
-    bra     data
+    bra     bcs
     
 check_bge
     move.w  d0,d1
-    cmp.b   #$FE,d1
-    beq     bge
+    cmp.b   #$FF,d1
+    beq     data
     
-    cmp.b   #$00,d1
-    beq     bge
-    
-    bra     data
+    bra     bge
 
 check_blt
     move.w  d0,d1
-    cmp.b   #$FE,d1
-    beq     blt
+    cmp.b   #$FF,d1
+    beq     data
     
-    cmp.b   #$00,d1
-    beq     blt
-    
-    bra     data
+    bra     blt
 
 check_bvc
     move.w  d0,d1
-    cmp.b   #$FE,d1
-    beq     bvc
+    cmp.b   #$FF,d1
+    beq     data
     
-    cmp.b   #$00,d1
-    beq     bvc
+    bra     bvc
     
-    bra     data
+bcc_data
+    jsr     data
+    move.w  (a2)+,d0
+    rts
     
 *-----------------------------------------------------------
 *                        OP Codes 			 				
@@ -1195,6 +1220,8 @@ moveM
     move.b  #'V',(a0)+
     move.b  #'E',(a0)+
     move.b  #'M',(a0)+
+    
+    move.b  #8,d4
 
     jsr     get_destination_mode_bits
     lsl.b   #7,d1
@@ -1378,17 +1405,13 @@ bclr
 
 
 bclr_static
-    jsr     get_source_mode_bits
-    cmp.b   #%000,d1
-    beq     size_l
-    bra     size_b
+    move.b  #3,d4
+    
     rts
 
 bclr_dynamic
-    jsr     get_source_mode_bits
-    cmp.b   #%000,d1
-    beq     size_l
-    bra     size_b
+    move.b  #5,d4
+    
     rts
     
 cmpi
@@ -1470,40 +1493,52 @@ bra
     move.b  #'R',(a0)+
     move.b  #'A',(a0)+
     
-    cmp.b   #$FE,d1
-    beq     size_s
+    move.b  #2,d4
     
-    bra     size_w
+    cmp.b   #$00,d1
+    beq     size_w
+    
+    bra     size_s
     
 bcs
     move.b  #'B',(a0)+
     move.b  #'C',(a0)+
     move.b  #'S',(a0)+
     
-    cmp.b   #$FE,d1
-    beq     size_s
+    move.b  #2,d4
     
-    bra     size_w
+    
+    cmp.b   #$00,d1
+    beq     size_w
+    
+    bra     size_s
+
     
 bge
     move.b  #'B',(a0)+
     move.b  #'G',(a0)+
     move.b  #'E',(a0)+
     
-    cmp.b   #$FE,d1
-    beq     size_s
+    move.b  #2,d4
     
-    bra     size_w
+    cmp.b   #$00,d1
+    beq     size_w
+    
+    bra     size_s
+
     
 blt
     move.b  #'B',(a0)+
     move.b  #'L',(a0)+
     move.b  #'T',(a0)+
     
-    cmp.b   #$FE,d1
-    beq     size_s
+    move.b  #2,d4
     
-    bra     size_w
+    cmp.b   #$00,d1
+    beq     size_w
+    
+    bra     size_s
+
     
     
 bvc
@@ -1511,10 +1546,13 @@ bvc
     move.b  #'V',(a0)+
     move.b  #'C',(a0)+
     
-    cmp.b   #$FE,d1
-    beq     size_s
+    move.b  #2,d4
+
+    cmp.b   #$00,d1
+    beq     size_w
     
-    bra     size_w
+    bra     size_s
+
     
 return_to_sub
     move.b  #'R',(a0)+
@@ -1525,7 +1563,7 @@ return_to_sub
     
 
 check_shift_size
-    cmp.b   #%11,d1
+    cmp.b   #%01,d1
     beq     size_w
     
     cmp.b   #%00,d1
@@ -1582,9 +1620,6 @@ size_s
     move.b  #'.',(a0)+
     move.b  #'S',(a0)+
     move.b  #' ',(a0)+
-    lea     compute_address_jump_table,a5
-    mulu    #8,d4
-    jsr     (a5,d4)
     rts
 
 *-----------------------------------------------------------
@@ -1653,6 +1688,21 @@ get_direction_bit
     jsr     get_destination_mode_bits
     lsr.b   #2,d1
     rts
+    
+get_displacement
+    lsl.l   #8,d1
+    lsl.l   #8,d1
+    lsl.l   #8,d1
+    lsr.l   #8,d1
+    lsr.l   #8,d1
+    lsr.l   #8,d1
+    rts
+    
+skip_bcc
+    jsr     data
+    jsr     get_displacement
+    cmp.b   #$00,d1
+    beq     data
     
 compute_address_jump_table
     jsr     compute_address_0
@@ -1728,6 +1778,7 @@ hex_jump_table
     jsr     e
     rts
     jsr     f
+    rts
     
     
 compute_address_0
@@ -1744,11 +1795,17 @@ compute_address_1
 
 compute_address_2
     jsr     cut_opcode
-    
+    jsr     get_displacement
+    cmp.b   #$00,d1
+    beq     displacement_word
+    bne     displacement_byte
     rts
+    
+
     
 compute_address_3
     move.b  #%111,d1
+    move.b  #%100,d3
     lea     address_mode_jump_table,a5
     mulu    #8,d1
     jsr     (a5,d1)
@@ -1758,11 +1815,24 @@ compute_address_3
     
 compute_address_4
     jsr     cut_opcode
+    jsr     get_source_mode_bits
+    lsr     #2,d1
+    cmp.b   #1,d1
+    beq     alt_compute_address_4
     move.b  #'#',(a0)+
     jsr     get_destination_register_bits
     cmp.b   #0,d1
     beq     shift_zero_to_eight_helper
     jsr     finish_compute_address_4
+    rts
+    
+alt_compute_address_4
+    jsr     get_destination_register_bits
+    move.b  d1,d3
+    move.b  #0,d1
+    lea     address_mode_jump_table,a5
+    jsr     (a5,d1)
+    jsr     finish_compute_address_4_alt
     rts
     
 shift_zero_to_eight_helper
@@ -1772,6 +1842,7 @@ finish_compute_address_4
     mulu    #8,d1
     lea     hex_jump_table,a5
     jsr     (a5,d1)
+finish_compute_address_4_alt
     move.b  #',',(a0)+
     jsr     get_source_register_bits
     move.b  d1,d3
@@ -1794,9 +1865,9 @@ compute_address_5
 compute_address_6
     jsr     cut_opcode
     jsr     get_direction_bit
-    cmp.b   #%0,d1
-    beq     reg_to_mem_compute_6
     cmp.b   #%1,d1
+    beq     reg_to_mem_compute_6
+    cmp.b   #%0,d1
     beq     mem_to_reg_compute_6
     rts
     
@@ -1804,6 +1875,7 @@ reg_to_mem_compute_6
     jsr     get_destination_register_bits
     move.b  d1,d3
     lea     address_mode_jump_table,a5
+    move.b  #0,d1
     jsr     (a5,d1)
     move.b  #',',(a0)+
     jsr     get_source    
@@ -1814,9 +1886,9 @@ mem_to_reg_compute_6
     move.b  #',',(a0)+
     jsr     get_destination_register_bits
     move.b  d1,d3
+    move.b  #0,d1
     lea     address_mode_jump_table,a5
     jsr     (a5,d1)
-    move.b  #',',(a0)+
     rts
     
 compute_address_7
@@ -1829,6 +1901,18 @@ compute_address_7
     move.b  #8,d1
     jsr     (a5,d1)
     rts
+    
+compute_address_8
+    jsr     get_destination_register_bits
+    
+    rts
+    
+reg_to_mem_compute_8
+    rts
+    
+mem_to_reg_compute_8
+    rts
+    
 *-----------------------------------------------------------
 *                     Addressing Modes				 				
 *-----------------------------------------------------------
@@ -1883,7 +1967,6 @@ immediate_data
     
     move.b  #'#',(a0)+
     move.b  #'$',(a0)+
-
     
     cmp.b   #1,d6
     beq     immediate_byte
@@ -1914,6 +1997,7 @@ absolute_long
     
 immediate_byte
     move.w  (a2)+,d1
+immediate_byte_disp
     move.w  d1,d4
     lsl.w   #5,d4
     lsl.w   #3,d4
@@ -1964,6 +2048,19 @@ immediate_word
 immediate_long
     jsr     immediate_word
     jsr     immediate_word
+    rts
+    
+displacement_word
+    move.b  #%111,d1
+    move.b  #%000,d3
+    lea     address_mode_jump_table,a5
+    mulu    #8,d1
+    jsr     (a5,d1)
+    rts
+    
+displacement_byte
+    jsr     get_displacement
+    jsr     immediate_byte_disp
     rts
 
 *-----------------------------------------------------------
@@ -2030,6 +2127,7 @@ f
     move.b  #'F',(a0)+
     rts
     
+    
 buffer  dc.w    80
 f_size  dc.b    160
 f_name  dc.b    'opcodes.txt',0
@@ -2047,9 +2145,14 @@ entend  dc.b    'Please enter an ending address: '                              
 s_notif dc.b    'Starting program deconstruction...'                                         ,cr,lf,0
 endprog dc.b    'Finished deconstruction.'                                                   ,0
 endinv  dc.b    'Something went very wrong...'                                               ,cr,lf
-        dc.b    'Exiting the program.'                                                       ,0  
+        dc.b    'Exiting the program.'                                                       ,0
+empty   dc.b    ''                                                                           ,0
+nx_pge  dc.b    'Press ENTER to proceed to the next page...'                                 ,0
 
     end    start
+
+
+
 
 
 
