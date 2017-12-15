@@ -342,11 +342,20 @@ check_add_type
     cmp.b   #6,d1
     beq     data
 
+    cmp.b   #1,d1
+    beq     check_valid_add_size
+    
     cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
     beq     check_add_source_register
     
        
     bra     add                             *Otherwise it's just ADD
+    
+check_valid_add_size
+    cmp.b   #0,d3
+    beq     data                            * size of ADD in address mode direct (001) cannot be a byte (opmode :000)
+    
+    bra     add
     
 add_EA_destination_type
     jsr     get_source_mode_bits
@@ -436,10 +445,19 @@ check_sub_type
     cmp.b   #6,d1
     beq     data
     
+    cmp.b   #1,d1
+    beq     check_valid_sub_size
+    
     cmp.b   #%111,d1                        * If mode is 111, check source register bits for validity
     beq     check_sub_source_register
   
     bra     sub                             *Otherwise it's just SUB
+    
+check_valid_sub_size
+    cmp.b   #0,d3
+    beq     data
+    
+    bra     sub
 
 sub_EA_destination_type
     jsr     get_source_mode_bits
@@ -1080,11 +1098,12 @@ check_6
     
 check_bra
     move.w  d0,d1
-    cmp.b   #$FE,d1
-    beq     bra
     
     cmp.b   #$00,d1
     beq     bra
+	
+	cmp.b   #$FE,d1
+    ble     bra
     
     bra     data
 
@@ -1105,41 +1124,42 @@ check_Bcc_type
     
 check_bcs
     move.w  d0,d1
-    cmp.b   #$FE,d1
-    beq     bcs
     
     cmp.b   #$00,d1
     beq     bcs
+	
+	cmp.b   #$FE,d1
+    ble     bcs
     
     bra     data
     
 check_bge
     move.w  d0,d1
-    cmp.b   #$FE,d1
-    beq     bge
-    
     cmp.b   #$00,d1
     beq     bge
+	
+	cmp.b   #$FE,d1
+    ble     bge
     
     bra     data
 
 check_blt
     move.w  d0,d1
-    cmp.b   #$FE,d1
-    beq     blt
-    
     cmp.b   #$00,d1
     beq     blt
+	
+	cmp.b   #$FE,d1
+    ble     blt
     
     bra     data
 
 check_bvc
     move.w  d0,d1
-    cmp.b   #$FE,d1
-    beq     bvc
-    
     cmp.b   #$00,d1
     beq     bvc
+	
+	cmp.b   #$FE,d1
+    ble     bvc
     
     bra     data
     
@@ -1473,40 +1493,44 @@ bra
     move.b  #'R',(a0)+
     move.b  #'A',(a0)+
     
-    cmp.b   #$FE,d1
-    beq     size_s
-    
+	cmp.b	#0,d1
     bra     size_w
+	
+	cmp.b   #$FE,d1
+    ble     size_s
     
 bcs
     move.b  #'B',(a0)+
     move.b  #'C',(a0)+
     move.b  #'S',(a0)+
     
-    cmp.b   #$FE,d1
-    beq     size_s
-    
+    cmp.b	#0,d1
     bra     size_w
+	
+	cmp.b   #$FE,d1
+    ble     size_s
     
 bge
     move.b  #'B',(a0)+
     move.b  #'G',(a0)+
     move.b  #'E',(a0)+
     
-    cmp.b   #$FE,d1
-    beq     size_s
-    
+    cmp.b	#0,d1
     bra     size_w
+	
+	cmp.b   #$FE,d1
+    ble     size_s
     
 blt
     move.b  #'B',(a0)+
     move.b  #'L',(a0)+
     move.b  #'T',(a0)+
     
-    cmp.b   #$FE,d1
-    beq     size_s
-    
+    cmp.b	#0,d1
     bra     size_w
+	
+	cmp.b   #$FE,d1
+    ble     size_s
     
     
 bvc
@@ -1514,10 +1538,11 @@ bvc
     move.b  #'V',(a0)+
     move.b  #'C',(a0)+
     
-    cmp.b   #$FE,d1
-    beq     size_s
-    
+    cmp.b	#0,d1
     bra     size_w
+	
+	cmp.b   #$FE,d1
+    ble     size_s
     
 return_to_sub
     move.b  #'R',(a0)+
@@ -2057,6 +2082,7 @@ endinv  dc.b    'Something went very wrong...'                                  
         dc.b    'Exiting the program.'                                                       ,0  
 
     end    start
+
 
 
 
